@@ -2,12 +2,23 @@
     RewriteEngine On
     RewriteBase /Attendance-System/
     
-    # Admin section error handling
-    RewriteCond %{REQUEST_URI} ^/Library-System/A/.*$
+    # Main section error handling
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^A/(.*)$ A/404.html [L,QSA]
+    RewriteRule ^(.*)$ 404.php [L,QSA]
+    
+    # Student section error handling
+    RewriteCond %{REQUEST_URI} ^/Attendance-System/S/.*$
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^S/(.*)$ S/404.php [L,QSA]
+    
+    # Faculty section error handling
+    RewriteCond %{REQUEST_URI} ^/Attendance-System/F/.*$
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^F/(.*)$ F/404.php [L,QSA]
 </IfModule>
 
-# Set custom 404 page for admin section
-ErrorDocument 404 /Library-System/A/404.php
+# Set custom 404 pages
+ErrorDocument 404 /Attendance-System/404.php
