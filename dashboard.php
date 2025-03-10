@@ -176,56 +176,62 @@ if ($recentActivitiesResult && $recentActivitiesResult->num_rows > 0) {
 
                         <!-- Total Users Card -->
                         <div class="col-xl-3 col-md-6 mb-4">
-                            <div class="card border-left-primary shadow h-100 py-2">
-                                <div class="card-body">
-                                    <div class="row no-gutters align-items-center">
-                                        <div class="col mr-2">
-                                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                                Total Users</div>
-                                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $totalUsers; ?></div>
-                                        </div>
-                                        <div class="col-auto">
-                                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                            <a href="users.php" style="text-decoration: none;">
+                                <div class="card border-left-primary shadow h-100 py-2">
+                                    <div class="card-body">
+                                        <div class="row no-gutters align-items-center">
+                                            <div class="col mr-2">
+                                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                                    Total Users</div>
+                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $totalUsers; ?></div>
+                                            </div>
+                                            <div class="col-auto">
+                                                <i class="fas fa-users fa-2x text-gray-300"></i>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </a>
                         </div>
 
                         <!-- Active Users Card -->
                         <div class="col-xl-3 col-md-6 mb-4">
-                            <div class="card border-left-success shadow h-100 py-2">
-                                <div class="card-body">
-                                    <div class="row no-gutters align-items-center">
-                                        <div class="col mr-2">
-                                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                                Active Users</div>
-                                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $activeUsers; ?></div>
-                                        </div>
-                                        <div class="col-auto">
-                                            <i class="fas fa-user-check fa-2x text-gray-300"></i>
+                            <a href="users.php" style="text-decoration: none;">
+                                <div class="card border-left-success shadow h-100 py-2">
+                                    <div class="card-body">
+                                        <div class="row no-gutters align-items-center">
+                                            <div class="col mr-2">
+                                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                                    Active Users</div>
+                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $activeUsers; ?></div>
+                                            </div>
+                                            <div class="col-auto">
+                                                <i class="fas fa-user-check fa-2x text-gray-300"></i>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </a>
                         </div>
 
                         <!-- Total Subjects Card -->
                         <div class="col-xl-3 col-md-6 mb-4">
-                            <div class="card border-left-info shadow h-100 py-2">
-                                <div class="card-body">
-                                    <div class="row no-gutters align-items-center">
-                                        <div class="col mr-2">
-                                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                                Total Subjects</div>
-                                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $totalSubjects; ?></div>
-                                        </div>
-                                        <div class="col-auto">
-                                            <i class="fas fa-book fa-2x text-gray-300"></i>
+                            <a href="subjects.php" style="text-decoration: none;">
+                                <div class="card border-left-info shadow h-100 py-2">
+                                    <div class="card-body">
+                                        <div class="row no-gutters align-items-center">
+                                            <div class="col mr-2">
+                                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                                    Total Subjects</div>
+                                                <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $totalSubjects; ?></div>
+                                            </div>
+                                            <div class="col-auto">
+                                                <i class="fas fa-book fa-2x text-gray-300"></i>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </a>
                         </div>
 
                         <!-- Today's Attendance Card -->
@@ -257,36 +263,44 @@ if ($recentActivitiesResult && $recentActivitiesResult->num_rows > 0) {
                                 <div class="card-body">
                                     <div class="row">
                                         <div class="col-lg-3 col-md-6 mb-4">
-                                            <div class="card bg-primary text-white shadow">
-                                                <div class="card-body">
-                                                    Total Faculty
-                                                    <div class="text-white-50 small"><?php echo $totalFaculty; ?></div>
+                                            <a href="users.php#faculty" style="text-decoration: none;">
+                                                <div class="card bg-primary text-white shadow">
+                                                    <div class="card-body">
+                                                        Total Faculty
+                                                        <div class="text-white-50 small"><?php echo $totalFaculty; ?></div>
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            </a>
                                         </div>
                                         <div class="col-lg-3 col-md-6 mb-4">
-                                            <div class="card bg-success text-white shadow">
-                                                <div class="card-body">
-                                                    Active Faculty
-                                                    <div class="text-white-50 small"><?php echo $activeFaculty; ?></div>
+                                            <a href="users.php#faculty" style="text-decoration: none;">
+                                                <div class="card bg-success text-white shadow">
+                                                    <div class="card-body">
+                                                        Active Faculty
+                                                        <div class="text-white-50 small"><?php echo $activeFaculty; ?></div>
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            </a>
                                         </div>
                                         <div class="col-lg-3 col-md-6 mb-4">
-                                            <div class="card bg-info text-white shadow">
-                                                <div class="card-body">
-                                                    Total Students
-                                                    <div class="text-white-50 small"><?php echo $totalStudents; ?></div>
+                                            <a href="users.php#students" style="text-decoration: none;">
+                                                <div class="card bg-info text-white shadow">
+                                                    <div class="card-body">
+                                                        Total Students
+                                                        <div class="text-white-50 small"><?php echo $totalStudents; ?></div>
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            </a>
                                         </div>
                                         <div class="col-lg-3 col-md-6 mb-4">
-                                            <div class="card bg-warning text-white shadow">
-                                                <div class="card-body">
-                                                    Active Students
-                                                    <div class="text-white-50 small"><?php echo $activeStudents; ?></div>
+                                            <a href="users.php#students" style="text-decoration: none;">
+                                                <div class="card bg-warning text-white shadow">
+                                                    <div class="card-body">
+                                                        Active Students
+                                                        <div class="text-white-50 small"><?php echo $activeStudents; ?></div>
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            </a>
                                         </div>
                                     </div>
                                 </div>

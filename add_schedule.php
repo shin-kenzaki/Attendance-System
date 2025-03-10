@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // Include database connection
-require '../db.php';
+require 'db.php';
 
 // Get form data
 $subjectId = $_POST['subject_id'] ?? '';

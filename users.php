@@ -1,8 +1,15 @@
 <?php
 session_start();
-// Check if user is logged in AND has admin access
-if (!isset($_SESSION['user_id']) || $_SESSION['usertype'] !== 'admin') {
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    // User not logged in - redirect to login page
     header("Location: index.php");
+    exit();
+} 
+// Allow access if user is admin or faculty (admins should have access to all pages)
+else if ($_SESSION['usertype'] !== 'admin') {
+    // User logged in but wrong role - show 404 page
+    header("Location: 404.php");
     exit();
 }
 
@@ -116,24 +123,24 @@ if ($result->num_rows > 0) {
                                             $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
                                             $status_text = ucfirst($row["status"]); 
                                             echo "<tr>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["id"]. "</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["email"]. "</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["department"]. "</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</div></td>";
-                                            echo "<td class='text-center'><div style='max-width: 200px; white-space: nowrap;'>
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["id"]) . "</td>";
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</td>";
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["email"]) . "</td>";
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["department"]) . "</td>";
+                                            echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
+                                            echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
+                                            echo "<td class='text-center' style='white-space: nowrap;'>
                                                     <div class='dropdown no-arrow'>
                                                         <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
                                                             Actions
                                                         </a>
                                                         <div class='dropdown-menu dropdown-menu-right shadow animated--fade-in' aria-labelledby='dropdownMenuLink'>
-                                                            <a class='dropdown-item' href='#' onclick='editUser(" . $row["id"] . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
-                                                            <a class='dropdown-item' href='#' onclick='generateNewPassword(" . $row["id"] . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
-                                                            <a class='dropdown-item' href='#' onclick='deleteUser(" . $row["id"] . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
+                                                            <a class='dropdown-item' href='#' onclick='editUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
+                                                            <a class='dropdown-item' href='#' onclick='generateNewPassword(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
+                                                            <a class='dropdown-item' href='#' onclick='deleteUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
                                                         </div>
                                                     </div>
-                                                </div></td>";
+                                                </td>";
                                             echo "</tr>";
                                         }
                                     } else {
@@ -170,24 +177,24 @@ if ($result->num_rows > 0) {
                                             $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
                                             $status_text = ucfirst($row["status"]);
                                             echo "<tr>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["id"]. "</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["email"]. "</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["department"]. "</div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></div></td>";
-                                            echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</div></td>";
-                                            echo "<td class='text-center'><div style='max-width: 200px; white-space: nowrap;'>
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["id"]) . "</td>";
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</td>";
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["email"]) . "</td>";
+                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["department"]) . "</td>";
+                                            echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
+                                            echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
+                                            echo "<td class='text-center' style='white-space: nowrap;'>
                                                     <div class='dropdown no-arrow'>
                                                         <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
                                                             Actions
                                                         </a>
                                                         <div class='dropdown-menu dropdown-menu-right shadow animated--fade-in' aria-labelledby='dropdownMenuLink'>
-                                                            <a class='dropdown-item' href='#' onclick='editUser(" . $row["id"] . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
-                                                            <a class='dropdown-item' href='#' onclick='generateNewPassword(" . $row["id"] . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
-                                                            <a class='dropdown-item' href='#' onclick='deleteUser(" . $row["id"] . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
+                                                            <a class='dropdown-item' href='#' onclick='editUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
+                                                            <a class='dropdown-item' href='#' onclick='generateNewPassword(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
+                                                            <a class='dropdown-item' href='#' onclick='deleteUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
                                                         </div>
                                                     </div>
-                                                </div></td>";
+                                                </td>";
                                             echo "</tr>";
                                         }
                                     } else {
@@ -225,25 +232,25 @@ if ($result->num_rows > 0) {
                                         $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
                                         $status_text = ucfirst($row["status"]);
                                         echo "<tr>";
-                                        echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["id"]. "</div></td>";
-                                        echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".</div></td>";
-                                        echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["email"]. "</div></td>";
-                                        echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . ucfirst($row["usertype"]). "</div></td>";
-                                        echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . $row["department"]. "</div></td>";
-                                        echo "<td><div style='max-width: 200px; white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></div></td>";
-                                        echo "<td><div style='max-width: 200px; white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</div></td>";
-                                        echo "<td class='text-center'><div style='max-width: 200px; white-space: nowrap;'>
+                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["id"]) . "</td>";
+                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</td>";
+                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["email"]) . "</td>";
+                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars(ucfirst($row["usertype"])) . "</td>";
+                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["department"]) . "</td>";
+                                        echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
+                                        echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
+                                        echo "<td class='text-center' style='white-space: nowrap;'>
                                                 <div class='dropdown no-arrow'>
                                                     <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
                                                         Actions
                                                     </a>
                                                     <div class='dropdown-menu dropdown-menu-right shadow animated--fade-in' aria-labelledby='dropdownMenuLink'>
-                                                        <a class='dropdown-item' href='#' onclick='editUser(" . $row["id"] . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
-                                                        <a class='dropdown-item' href='#' onclick='generateNewPassword(" . $row["id"] . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
-                                                        <a class='dropdown-item' href='#' onclick='deleteUser(" . $row["id"] . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
+                                                        <a class='dropdown-item' href='#' onclick='editUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
+                                                        <a class='dropdown-item' href='#' onclick='generateNewPassword(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
+                                                        <a class='dropdown-item' href='#' onclick='deleteUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
                                                     </div>
                                                 </div>
-                                            </div></td>";
+                                            </td>";
                                         echo "</tr>";
                                     }
                                     ?>
@@ -479,6 +486,14 @@ $(document).ready(function() {
     $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
         $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
     });
+    
+    // Handle direct linking to tabs via URL hash
+    if(window.location.hash) {
+        const hash = window.location.hash.substring(1);
+        if(hash === 'faculty' || hash === 'students' || hash === 'others') {
+            $(`#${hash}-tab`).tab('show');
+        }
+    }
 });
 
 // Function to generate random password

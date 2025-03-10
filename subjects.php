@@ -1,8 +1,15 @@
 <?php
 session_start();
-// Check if user is logged in AND has admin access
-if (!isset($_SESSION['user_id']) || $_SESSION['usertype'] !== 'admin') {
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    // User not logged in - redirect to login page
     header("Location: index.php");
+    exit();
+} 
+// Allow access if user is admin or faculty (admins should have access to all pages)
+else if ($_SESSION['usertype'] !== 'admin' && $_SESSION['usertype'] !== 'faculty') {
+    // User logged in but wrong role - show 404 page
+    header("Location: 404.php");
     exit();
 }
 
@@ -110,54 +117,87 @@ $result = $conn->query($sql);
         <div class="modal-content">
             <form method="post" action="add_subject.php">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="addSubjectModalLabel">Add New Subject</h5>
+                    <h5 class="modal-title" id="addSubjectModalLabel">Add New Subjects</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="code">Subject Code</label>
-                            <input type="text" class="form-control" id="code" name="code" required>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="name">Subject Name</label>
-                            <input type="text" class="form-control" id="name" name="name" required>
+                    <div id="subjects-container">
+                        <div class="subject-entry">
+                            <div class="form-row">
+                                <div class="form-group col-md-6">
+                                    <label for="code">Subject Code</label>
+                                    <input type="text" class="form-control" name="code[]" required>
+                                </div>
+                                <div class="form-group col-md-6">
+                                    <label for="name">Subject Name</label>
+                                    <input type="text" class="form-control" name="name[]" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group col-md-4">
+                                    <label for="faculty_search">Search Faculty</label>
+                                    <input type="text" class="form-control faculty_search" placeholder="Search Faculty...">
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label for="faculty_id">Faculty (Optional)</label>
+                                    <select class="form-control faculty_id" name="faculty_id[]">
+                                        <option value="">Select Faculty</option>
+                                        <?php
+                                        $faculty_sql = "SELECT id, firstname, lastname FROM users WHERE usertype = 'faculty'";
+                                        $faculty_result = $conn->query($faculty_sql);
+                                        if ($faculty_result->num_rows > 0) {
+                                            while($faculty = $faculty_result->fetch_assoc()) {
+                                                echo '<option value="' . $faculty["id"] . '">' . $faculty["lastname"] . ', ' . $faculty["firstname"] . '</option>';
+                                            }
+                                        }
+                                        ?>
+                                    </select>
+                                </div>
+                                <div class="form-group col-md-4 d-flex align-items-end">
+                                    <button type="button" class="btn btn-danger remove-subject w-100">Remove</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="faculty_search">Search Faculty</label>
-                            <input type="text" class="form-control" id="faculty_search" placeholder="Search Faculty...">
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label for="faculty_id">Faculty (Optional)</label>
-                            <select class="form-control" id="faculty_id" name="faculty_id">
-                                <option value="">Select Faculty</option>
-                                <?php
-                                $faculty_sql = "SELECT id, firstname, lastname FROM users WHERE usertype = 'faculty'";
-                                $faculty_result = $conn->query($faculty_sql);
-                                if ($faculty_result->num_rows > 0) {
-                                    while($faculty = $faculty_result->fetch_assoc()) {
-                                        echo '<option value="' . $faculty["id"] . '">' . $faculty["lastname"] . ', ' . $faculty["firstname"] . '</option>';
-                                    }
-                                }
-                                ?>
-                            </select>
-                        </div>
-                    </div>
-                    <!-- Hidden field for auto-generated join code -->
-                    <input type="hidden" name="joincode" id="joincode">
+                    <button type="button" class="btn btn-secondary" id="add-more-subjects">Add More Subjects</button>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Add Subject</button>
+                    <button type="submit" class="btn btn-primary">Add Subjects</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+$(document).ready(function() {
+    $('#add-more-subjects').click(function() {
+        var newEntry = $('.subject-entry:first').clone();
+        newEntry.find('input').val('');
+        newEntry.find('select').val('');
+        $('#subjects-container').append(newEntry);
+    });
+
+    $(document).on('input', '.faculty_search', function() {
+        const searchValue = $(this).val().toLowerCase();
+        $(this).closest('.subject-entry').find('.faculty_id option').each(function() {
+            const optionText = $(this).text().toLowerCase();
+            $(this).toggle(optionText.includes(searchValue));
+        });
+    });
+
+    $(document).on('click', '.remove-subject', function() {
+        if ($('.subject-entry').length > 1) {
+            $(this).closest('.subject-entry').remove();
+        } else {
+            alert('At least one subject entry is required.');
+        }
+    });
+});
+</script>
 
 <!-- Edit Subject Modal -->
 <div class="modal fade" id="editSubjectModal" tabindex="-1" role="dialog" aria-labelledby="editSubjectModalLabel" aria-hidden="true">
@@ -231,6 +271,36 @@ $result = $conn->query($sql);
 <!-- Page level custom scripts -->
 <script>
 $(document).ready(function() {
+    // Check if there's a success message for subject creation
+    <?php if(isset($_SESSION['subject_success'])) { ?>
+        Swal.fire({
+            title: 'Subjects Added Successfully!',
+            html: '<ul><?php foreach ($_SESSION["subject_success"] as $message) { echo "<li>$message</li>"; } ?></ul>',
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'OK'
+        });
+        <?php 
+        // Clear the session variables
+        unset($_SESSION['subject_success']);
+        ?>
+    <?php } ?>
+    
+    // Check if there's an error message for subject creation
+    <?php if(isset($_SESSION['subject_error'])) { ?>
+        Swal.fire({
+            title: 'Error Adding Subjects',
+            html: '<ul><?php foreach ($_SESSION["subject_error"] as $message) { echo "<li>$message</li>"; } ?></ul>',
+            icon: 'error',
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'OK'
+        });
+        <?php 
+        // Clear the session variables
+        unset($_SESSION['subject_error']);
+        ?>
+    <?php } ?>
+
     // Check if there's a success message for subject creation
     <?php if(isset($_SESSION['subject_success'])) { ?>
         Swal.fire({

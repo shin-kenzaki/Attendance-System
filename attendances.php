@@ -1,8 +1,15 @@
 <?php
 session_start();
-// Check if user is logged in AND has admin access
-if (!isset($_SESSION['user_id']) || $_SESSION['usertype'] !== 'admin') {
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    // User not logged in - redirect to login page
     header("Location: index.php");
+    exit();
+} 
+// Allow access if user is admin or faculty (admins should have access to all pages)
+else if ($_SESSION['usertype'] !== 'admin' && $_SESSION['usertype'] !== 'faculty') {
+    // User logged in but wrong role - show 404 page
+    header("Location: 404.php");
     exit();
 }
 

@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     // Set session variables
                     $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['usertype'] = $user['usertype'];
                     $_SESSION['firstname'] = $user['firstname'];
                     $_SESSION['middle_init'] = $user['middle_init'];
                     $_SESSION['lastname'] = $user['lastname'];
