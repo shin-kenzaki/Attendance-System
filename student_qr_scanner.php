@@ -69,7 +69,7 @@ include 'includes/header.php';
     </div>
 
     <div class="row justify-content-center">
-        <div class="col-lg-8">
+        <div class="col-lg-8 col-md-10 col-sm-12">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary">Scan Instructor's QR Code</h6>
@@ -84,9 +84,18 @@ include 'includes/header.php';
 
                     <!-- Scanner Container -->
                     <div class="scanner-wrapper mb-4">
-                        <div id="scanner-container" class="mx-auto" 
-                             style="max-width: 500px; border: 2px solid #eaeaea; border-radius: 10px; overflow: hidden;">
-                            <div id="reader" style="width: 100%; min-height: 400px;"></div>
+                        <div id="scanner-container" class="mx-auto position-relative" 
+                             style="max-width: 100%; border: 2px solid #eaeaea; border-radius: 10px; overflow: hidden;">
+                            <!-- Camera switch loading overlay -->
+                            <div id="camera-loading-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; border-radius: 10px; z-index: 10;">
+                                <div class="text-center text-white">
+                                    <div class="spinner-border text-light mb-2" role="status">
+                                        <span class="sr-only">Loading...</span>
+                                    </div>
+                                    <p>Switching camera...</p>
+                                </div>
+                            </div>
+                            <div id="reader" style="width: 100%; min-height: 300px;"></div>
                         </div>
                         <div id="scan-status" class="text-center mt-3">
                             <p class="text-muted">Initializing camera...</p>
@@ -94,8 +103,8 @@ include 'includes/header.php';
                     </div>
 
                     <!-- Camera Controls -->
-                    <div class="d-flex justify-content-center mb-4">
-                        <button id="toggle-camera-btn" class="btn btn-primary mx-1">
+                    <div class="d-flex flex-column flex-sm-row justify-content-center mb-4">
+                        <button id="toggle-camera-btn" class="btn btn-primary mx-1 mb-2 mb-sm-0">
                             <i class="fas fa-video-slash"></i> Stop Camera
                         </button>
                         <button id="change-camera-btn" class="btn btn-secondary mx-1">
@@ -126,6 +135,7 @@ let html5QrCode = null;
 let cameraId = null;
 let cameraList = [];
 let scanning = false;
+let isFrontCamera = true; // Track if front camera is in use
 
 // Add success sound for successful scans
 let successAudio;
@@ -165,12 +175,17 @@ function startScanner() {
     if (!html5QrCode) return;
     
     $('#scan-status').html('<p class="text-primary">Starting camera...</p>');
+    $('#camera-loading-overlay').css('display', 'flex');
     scanning = true;
+    
+    // Configure scanner with responsive sizing
+    const scannerWidth = $('#scanner-container').width();
+    const qrboxSize = Math.min(scannerWidth * 0.7, 250); // Responsive scanning area
     
     // Configure scanner
     const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 },
+        qrbox: { width: qrboxSize, height: qrboxSize },
         aspectRatio: 1.0,
         formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
     };
@@ -183,21 +198,41 @@ function startScanner() {
         (errorMessage) => {
             // This is the onScanProgress callback
             // We don't need to show errors during normal scanning
-            // Only update UI for actual errors, not scanning progress
         }
     )
     .then(() => {
         $('#scan-status').html('<p class="text-success">Camera active. Point at instructor\'s QR code.</p>');
         $('#scanner-status-badge').removeClass('badge-warning').addClass('badge-success').text('Ready to Scan');
         $('#toggle-camera-btn').html('<i class="fas fa-video-slash"></i> Stop Camera');
+        $('#camera-loading-overlay').hide();
+        
+        // Apply or remove mirror effect based on camera type
+        checkCameraType();
     })
     .catch(err => {
         scanning = false;
         $('#scan-status').html(`<p class="text-danger">Error starting camera: ${err}</p>`);
         $('#scanner-status-badge').removeClass('badge-success').addClass('badge-danger').text('Scanner Error');
         $('#toggle-camera-btn').html('<i class="fas fa-video"></i> Start Camera');
+        $('#camera-loading-overlay').hide();
         console.error("Error starting camera", err);
     });
+}
+
+// Check camera type and apply appropriate styling
+function checkCameraType() {
+    // If device has multiple cameras, assume the first is front and others are back cameras
+    if (cameraList.length > 1) {
+        const currentIndex = cameraList.findIndex(camera => camera.id === cameraId);
+        isFrontCamera = currentIndex === 0;
+    }
+    
+    // Apply mirror effect only for front camera
+    if (isFrontCamera) {
+        $('#reader').css('transform', 'scaleX(-1)');
+    } else {
+        $('#reader').css('transform', 'none');
+    }
 }
 
 // Stop the scanner
@@ -306,16 +341,76 @@ $('#toggle-camera-btn').on('click', function() {
     }
 });
 
+// Updated camera switch button handler with animation
 $('#change-camera-btn').on('click', function() {
     if (cameraList.length <= 1) {
         Swal.fire('No Alternative Cameras', 'No other cameras are available on this device', 'info');
         return;
     }
     
+    // Find the next camera in the list
     const currentIndex = cameraList.findIndex(camera => camera.id === cameraId);
     const nextIndex = (currentIndex + 1) % cameraList.length;
     cameraId = cameraList[nextIndex].id;
     
+    // Only switch if currently scanning
+    if (scanning && html5QrCode) {
+        // Update status and show loading overlay with fade in effect
+        $('#scan-status').html(`<p class="text-primary">Switching to camera ${nextIndex + 1}...</p>`);
+        $('#camera-loading-overlay').css('display', 'flex').fadeIn(300);
+        
+        // Disable the button during transition to prevent multiple clicks
+        $(this).prop('disabled', true);
+        
+        // Stop current camera then immediately start new one
+        html5QrCode.stop().then(() => {
+            // Configuration for scanner with responsive sizing
+            const scannerWidth = $('#scanner-container').width();
+            const qrboxSize = Math.min(scannerWidth * 0.7, 250);
+            
+            const config = {
+                fps: 10,
+                qrbox: { width: qrboxSize, height: qrboxSize },
+                aspectRatio: 1.0,
+                formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+            };
+            
+            // Immediately start the new camera
+            return html5QrCode.start(cameraId, config, onScanSuccess, onScanFailure);
+        })
+        .then(() => {
+            // Hide loading overlay with fade effect
+            $('#camera-loading-overlay').fadeOut(300);
+            $('#scan-status').html('<p class="text-success">Camera switched. Scanning for QR code...</p>');
+            // Re-enable the button
+            $('#change-camera-btn').prop('disabled', false);
+            
+            // Update mirror effect based on new camera
+            checkCameraType();
+        })
+        .catch(err => {
+            // Hide loading overlay if there's an error
+            $('#camera-loading-overlay').fadeOut(300);
+            scanning = false;
+            $('#scan-status').html(`<p class="text-danger">Error switching camera: ${err}</p>`);
+            $('#toggle-camera-btn').html('<i class="fas fa-video"></i> Start Camera');
+            $('#change-camera-btn').prop('disabled', false);
+            console.error("Error during camera switch", err);
+        });
+    } else {
+        // If not scanning, just update the selected camera
+        $('#scan-status').html(`<p class="text-info">Selected camera ${nextIndex + 1}. Press "Start Camera" to begin.</p>`);
+    }
+});
+
+// Add onScanFailure function to handle scan failures silently
+function onScanFailure(error) {
+    // We don't need to show errors during normal scanning
+    console.log('QR code scanning ongoing');
+}
+
+// Make scanner responsive on window resize
+$(window).on('resize', function() {
     if (scanning) {
         stopScanner();
         startScanner();

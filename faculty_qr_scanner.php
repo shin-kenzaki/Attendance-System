@@ -77,7 +77,7 @@ include 'includes/header.php';
     <!-- Scanner and Attendance Log Row -->
     <div class="row">
         <!-- QR Scanner Card -->
-        <div class="col-lg-6">
+        <div class="col-lg-6 col-md-12 mb-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Scan Student QR Codes</h6>
@@ -106,8 +106,17 @@ include 'includes/header.php';
 
                     <!-- Scanner Container -->
                     <div class="scanner-wrapper mb-4">
-                        <div id="scanner-container" class="mx-auto" style="max-width: 500px; border: 2px solid #eaeaea; border-radius: 10px; overflow: hidden;">
-                            <div id="reader" style="width: 100%; min-height: 400px; transform: scaleX(-1);"></div> <!-- Added transform: scaleX(-1); -->
+                        <div id="scanner-container" class="mx-auto" style="max-width: 100%; border: 2px solid #eaeaea; border-radius: 10px; overflow: hidden; position: relative;">
+                            <!-- Camera switch loading overlay -->
+                            <div id="camera-loading-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; border-radius: 10px; z-index: 10;">
+                                <div class="text-center text-white">
+                                    <div class="spinner-border text-light mb-2" role="status">
+                                        <span class="sr-only">Loading...</span>
+                                    </div>
+                                    <p>Switching camera...</p>
+                                </div>
+                            </div>
+                            <div id="reader" style="width: 100%; min-height: 300px;"></div> <!-- Removed mirror transform -->
                         </div>
                         <div id="scanner-status" class="text-center mt-3">
                             <p class="text-muted">Initializing camera...</p>
@@ -115,8 +124,8 @@ include 'includes/header.php';
                     </div>
 
                     <!-- Camera Controls -->
-                    <div class="d-flex justify-content-center mb-4">
-                        <button id="toggle-camera-btn" class="btn btn-primary mx-1">
+                    <div class="d-flex flex-column flex-sm-row justify-content-center mb-4">
+                        <button id="toggle-camera-btn" class="btn btn-primary mb-2 mb-sm-0 mx-1">
                             <i class="fas fa-video-slash"></i> Stop Camera
                         </button>
                         <button id="change-camera-btn" class="btn btn-secondary mx-1">
@@ -128,7 +137,7 @@ include 'includes/header.php';
         </div>
 
         <!-- Attendance Log Card -->
-        <div class="col-lg-6">
+        <div class="col-lg-6 col-md-12 mb-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Attendance Log</h6>
@@ -177,6 +186,7 @@ let cameraId = null;
 let cameraList = [];
 let scanning = false;
 let attendanceLog = [];
+let isFrontCamera = true; // Track if front camera is in use
 const subject_id = <?php echo $subject_id; ?>;
 const schedule_id = <?php echo $current_schedule ? $current_schedule['id'] : 'null'; ?>;
 
@@ -216,10 +226,13 @@ function startScanner() {
     $('#scanner-status').html('<p class="text-primary">Starting camera...</p>');
     scanning = true;
     
-    // Configure scanner
+    // Configure scanner with responsive settings
+    const scannerWidth = $('#scanner-container').width();
+    const qrboxSize = Math.min(scannerWidth * 0.7, 250); // Responsive scanning area
+    
     const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 },
+        qrbox: { width: qrboxSize, height: qrboxSize },
         aspectRatio: 1.0,
         formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
     };
@@ -235,6 +248,9 @@ function startScanner() {
         $('#scanner-status').html('<p class="text-success">Camera active. Scan a student QR code.</p>');
         $('#toggle-camera-btn').html('<i class="fas fa-video-slash"></i> Stop Camera');
         $('#scannerStatusBtn').removeClass('btn-danger').addClass('btn-success').html('<i class="fas fa-check-circle mr-1"></i> Scanner Active');
+        
+        // Check camera type and apply appropriate styling
+        checkCameraType();
     })
     .catch(err => {
         scanning = false;
@@ -243,6 +259,22 @@ function startScanner() {
         $('#scannerStatusBtn').removeClass('btn-success').addClass('btn-danger').html('<i class="fas fa-exclamation-circle mr-1"></i> Scanner Error');
         console.error("Error starting camera", err);
     });
+}
+
+// Check camera type and apply appropriate styling
+function checkCameraType() {
+    // If device has multiple cameras, assume the first is front and others are back cameras
+    if (cameraList.length > 1) {
+        const currentIndex = cameraList.findIndex(camera => camera.id === cameraId);
+        isFrontCamera = currentIndex === 0;
+    }
+    
+    // Apply mirror effect only for front camera
+    if (isFrontCamera) {
+        $('#reader').css('transform', 'scaleX(-1)');
+    } else {
+        $('#reader').css('transform', 'none');
+    }
 }
 
 // Stop the scanner
@@ -273,6 +305,11 @@ function onScanSuccess(decodedText, decodedResult) {
             throw new Error('Invalid QR code format');
         }
         
+        // Check if this QR is for the correct subject
+        if (data.subject_id != subject_id) {
+            throw new Error('This QR code is for a different subject');
+        }
+        
         // Check if student has already been scanned
         const existingRecord = attendanceLog.find(record => record.user_id === data.user_id);
         if (existingRecord) {
@@ -297,7 +334,7 @@ function onScanSuccess(decodedText, decodedResult) {
         // Show error notification
         Swal.fire({
             title: 'Invalid QR Code',
-            text: 'Could not process the scanned QR code. Please try again.',
+            text: error.message || 'Could not process the scanned QR code. Please try again.',
             icon: 'error',
             timer: 3000,
             timerProgressBar: true,
@@ -322,7 +359,12 @@ function recordAttendance(studentData) {
         user_id: studentData.user_id,
         subject_id: subject_id,
         schedule_id: schedule_id,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        student_data: JSON.stringify({
+            name: studentData.name,
+            email: studentData.email,
+            department: studentData.department || ''
+        })
     };
     
     // Send attendance data to server
@@ -419,10 +461,55 @@ $('#change-camera-btn').on('click', function() {
     const nextIndex = (currentIndex + 1) % cameraList.length;
     cameraId = cameraList[nextIndex].id;
     
-    // Restart scanner with new camera
-    if (scanning) {
-        stopScanner();
-        startScanner();
+    // Only switch if currently scanning
+    if (scanning && html5QrCode) {
+        // Update status and show loading overlay with fade in effect
+        $('#scanner-status').html(`<p class="text-primary">Switching to camera ${nextIndex + 1}...</p>`);
+        $('#camera-loading-overlay').css('display', 'flex').fadeIn(300);
+        
+        // Disable the button during transition to prevent multiple clicks
+        $(this).prop('disabled', true);
+        
+        // Stop current camera then immediately start new one
+        html5QrCode.stop().then(() => {
+            // Configure scanner with responsive settings
+            const scannerWidth = $('#scanner-container').width();
+            const qrboxSize = Math.min(scannerWidth * 0.7, 250); // Responsive scanning area
+            
+            const config = {
+                fps: 10,
+                qrbox: { width: qrboxSize, height: qrboxSize },
+                aspectRatio: 1.0,
+                formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+            };
+            
+            // Immediately start the new camera
+            return html5QrCode.start(cameraId, config, onScanSuccess, onScanProgress);
+        })
+        .then(() => {
+            // Hide loading overlay with fade effect
+            $('#camera-loading-overlay').fadeOut(300);
+            $('#scanner-status').html('<p class="text-success">Camera switched. Scan a student QR code.</p>');
+            $('#scannerStatusBtn').removeClass('btn-danger').addClass('btn-success').html('<i class="fas fa-check-circle mr-1"></i> Scanner Active');
+            // Re-enable the button
+            $('#change-camera-btn').prop('disabled', false);
+            
+            // Check camera type and apply appropriate styling
+            checkCameraType();
+        })
+        .catch(err => {
+            // Hide loading overlay if there's an error
+            $('#camera-loading-overlay').fadeOut(300);
+            scanning = false;
+            $('#scanner-status').html(`<p class="text-danger">Error switching camera: ${err}</p>`);
+            $('#toggle-camera-btn').html('<i class="fas fa-video"></i> Start Camera');
+            $('#scannerStatusBtn').removeClass('btn-success').addClass('btn-danger').html('<i class="fas fa-exclamation-circle mr-1"></i> Scanner Error');
+            $('#change-camera-btn').prop('disabled', false);
+            console.error("Error during camera switch", err);
+        });
+    } else {
+        // If not scanning, just update the selected camera
+        $('#scanner-status').html(`<p class="text-info">Selected camera ${nextIndex + 1}. Press "Start Camera" to begin.</p>`);
     }
 });
 
@@ -447,6 +534,14 @@ $('#export-csv-btn').on('click', function() {
     // Trigger download
     link.click();
     document.body.removeChild(link);
+});
+
+// Make scanner responsive when window resizes
+$(window).on('resize', function() {
+    if (scanning) {
+        stopScanner();
+        startScanner();
+    }
 });
 </script>
 

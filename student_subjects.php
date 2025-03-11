@@ -133,20 +133,7 @@ include 'includes/header.php';
                         <h6 class="m-0 font-weight-bold text-info">
                             <?php echo htmlspecialchars($subject['code']); ?>
                         </h6>
-                        <div class="dropdown no-arrow">
-                            <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
-                            </a>
-                            <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in" aria-labelledby="dropdownMenuLink">
-                                <div class="dropdown-header">Actions:</div>
-                                <a class="dropdown-item" href="view_subject.php?id=<?php echo $subject['id']; ?>">
-                                    <i class="fas fa-eye fa-sm fa-fw mr-2 text-gray-400"></i>View Details
-                                </a>
-                                <a class="dropdown-item text-danger unenroll-subject" href="#" data-id="<?php echo $subject['enrollment_id']; ?>">
-                                    <i class="fas fa-times fa-sm fa-fw mr-2 text-danger"></i>Unenroll
-                                </a>
-                            </div>
-                        </div>
+                        
                     </div>
                     <div class="card-body">
                         <h5 class="card-title font-weight-bold"><?php echo htmlspecialchars($subject['name']); ?></h5>
@@ -177,7 +164,7 @@ include 'includes/header.php';
                     <div class="card-footer bg-transparent">
                         <div class="row">
                             <div class="col-6">
-                                <a href="view_subject.php?id=<?php echo $subject['id']; ?>" class="btn btn-info btn-block">
+                                <a href="student_view_subject.php?id=<?php echo $subject['id']; ?>" class="btn btn-info btn-block">
                                     <i class="fas fa-eye mr-1"></i> View
                                 </a>
                             </div>

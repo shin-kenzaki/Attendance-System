@@ -53,6 +53,31 @@ if ($result->num_rows > 0) {
     <h1 class="h3 mb-2 text-gray-800">Users</h1>
     <p class="mb-4">Manage faculty and student users in separate tabs.</p>
 
+    <!-- Success/Error Messages -->
+    <?php if(isset($_SESSION['success_message'])): ?>
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <?php 
+            echo $_SESSION['success_message']; 
+            unset($_SESSION['success_message']);
+            ?>
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    <?php endif; ?>
+
+    <?php if(isset($_SESSION['error_message'])): ?>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <?php 
+            echo $_SESSION['error_message']; 
+            unset($_SESSION['error_message']);
+            ?>
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    <?php endif; ?>
+
     <!-- DataTales Card -->
     <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
@@ -268,69 +293,75 @@ if ($result->num_rows > 0) {
 
 <!-- Add User Modal -->
 <div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-labelledby="addUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <form method="post" action="add_user.php">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="addUserModalLabel">Add New User</h5>
+                    <h5 class="modal-title" id="addUserModalLabel">Add New Users</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-row">
-                        <div class="form-group col-md-4">
-                            <label for="firstname">First Name</label>
-                            <input type="text" class="form-control" id="firstname" name="firstname" required>
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="middle_init">Middle Initial</label>
-                            <input type="text" class="form-control" id="middle_init" name="middle_init">
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="lastname">Last Name</label>
-                            <input type="text" class="form-control" id="lastname" name="lastname" required>
+                    <div id="users-container">
+                        <div class="user-entry mb-3 border-bottom pb-3">
+                            <div class="form-row">
+                                <div class="form-group col-md-4">
+                                    <label>First Name</label>
+                                    <input type="text" class="form-control" name="firstname[]" required>
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label>Middle Initial</label>
+                                    <input type="text" class="form-control" name="middle_init[]">
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label>Last Name</label>
+                                    <input type="text" class="form-control" name="lastname[]" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group col-md-6">
+                                    <label>Email</label>
+                                    <input type="email" class="form-control" name="email[]" required>
+                                </div>
+                                <div class="form-group col-md-6">
+                                    <label>User Type</label>
+                                    <select class="form-control" name="usertype[]" required>
+                                        <option value="student">Student</option>
+                                        <option value="faculty">Faculty</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group col-md-4">
+                                    <label>Department</label>
+                                    <select class="form-control" name="department[]" required>
+                                        <option value="BSCS">BSCS</option>
+                                        <option value="BSAIS">BSAIS</option>
+                                        <option value="BSA">BSA</option>
+                                        <option value="BSE">BSE</option>
+                                        <option value="BSTM">BSTM</option>
+                                    </select>
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label>Gender</label>
+                                    <select class="form-control" name="gender[]" required>
+                                        <option value="male">Male</option>
+                                        <option value="female">Female</option>
+                                    </select>
+                                </div>
+                                <div class="form-group col-md-4 d-flex align-items-end">
+                                    <button type="button" class="btn btn-danger remove-user w-100">Remove</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-12">
-                            <label for="email">Email</label>
-                            <input type="email" class="form-control" id="email" name="email" required>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-4">
-                            <label for="usertype">User Type</label>
-                            <select class="form-control" id="usertype" name="usertype" required>
-                                <option value="student">Student</option>
-                                <option value="faculty">Faculty</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="department">Department</label>
-                            <select class="form-control" id="department" name="department" required>
-                                <option value="BSCS">BSCS</option>
-                                <option value="BSAIS">BSAIS</option>
-                                <option value="BSA">BSA</option>
-                                <option value="BSE">BSE</option>
-                                <option value="BSTM">BSTM</option>
-                            </select>
-                        </div>
-                        <div class="form-group col-md-4">
-                            <label for="gender">Gender</label>
-                            <select class="form-control" id="gender" name="gender" required>
-                                <option value="male">Male</option>
-                                <option value="female">Female</option>
-                            </select>
-                        </div>
-                    </div>
-                    <!-- Hidden field for auto-generated password -->
-                    <input type="hidden" name="auto_password" id="auto_password">
+                    <button type="button" class="btn btn-secondary" id="add-more-users">Add More Users</button>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Add User</button>
+                    <button type="submit" class="btn btn-primary">Add Users</button>
                 </div>
             </form>
         </div>
@@ -431,22 +462,32 @@ if ($result->num_rows > 0) {
 <script>
 $(document).ready(function() {
     // Check if there's a success message with credentials
-    <?php if(isset($_SESSION['success']) && isset($_SESSION['email']) && isset($_SESSION['password'])) { ?>
+    // Check if there are user credentials to display
+    <?php if(isset($_SESSION['success']) && isset($_SESSION['user_credentials'])) { ?>
         Swal.fire({
-            title: 'User Added Successfully!',
-            html: '<p>User has been created with the following credentials:</p>' +
-                  '<p><strong>Email:</strong> <?php echo $_SESSION["email"]; ?></p>' +
-                  '<p><strong>Password:</strong> <?php echo $_SESSION["password"]; ?></p>' +
-                  '<p>Please save or share these credentials with the user.</p>',
+            title: 'Users Added Successfully!',
+            html: `<div class="text-left">
+                <p>Users have been created with the following credentials:</p>
+                <ul>
+                    <?php foreach ($_SESSION["user_credentials"] as $user): ?>
+                        <li>
+                            <strong><?php echo $user["name"]; ?></strong><br>
+                            Email: <?php echo $user["email"]; ?><br>
+                            Password: <?php echo $user["password"]; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+                <p>Please save or share these credentials with the users.</p>
+            </div>`,
             icon: 'success',
+            width: '600px',
             confirmButtonColor: '#3085d6',
             confirmButtonText: 'OK'
         });
         <?php 
         // Clear the session variables
         unset($_SESSION['success']);
-        unset($_SESSION['email']);
-        unset($_SESSION['password']);
+        unset($_SESSION['user_credentials']);
         ?>
     <?php } ?>
 
@@ -493,6 +534,23 @@ $(document).ready(function() {
         if(hash === 'faculty' || hash === 'students' || hash === 'others') {
             $(`#${hash}-tab`).tab('show');
         }
+    }
+});
+
+// Handle adding more users
+$('#add-more-users').click(function() {
+    var newEntry = $('.user-entry:first').clone();
+    newEntry.find('input').val('');
+    newEntry.find('select').prop('selectedIndex', 0);
+    $('#users-container').append(newEntry);
+});
+
+// Handle removing users
+$(document).on('click', '.remove-user', function() {
+    if ($('.user-entry').length > 1) {
+        $(this).closest('.user-entry').remove();
+    } else {
+        alert('At least one user entry is required.');
     }
 });
 

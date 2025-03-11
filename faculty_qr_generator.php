@@ -77,7 +77,7 @@ include 'includes/header.php';
     <!-- QR Code and Attendance Row -->
     <div class="row">
         <!-- QR Code Display Card -->
-        <div class="col-lg-6">
+        <div class="col-lg-6 col-md-12 mb-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Attendance QR Code</h6>
@@ -107,7 +107,7 @@ include 'includes/header.php';
                     <!-- QR Code Container -->
                     <div class="qr-wrapper mb-4">
                         <div id="qr-container" class="mx-auto d-flex justify-content-center align-items-center" style="min-height: 300px;">
-                            <div id="qrcode" class="border p-3 bg-white rounded"></div>
+                            <div id="qrcode" class="border p-3 bg-white rounded" style="max-width: 100%; overflow: hidden;"></div>
                         </div>
                         <div id="qr-status" class="text-center mt-3">
                             <span class="badge badge-pill badge-success px-3 py-2 font-weight-bold">QR Code Active</span>
@@ -116,8 +116,8 @@ include 'includes/header.php';
                     </div>
 
                     <!-- QR Controls -->
-                    <div class="d-flex justify-content-center mb-4">
-                        <button id="refresh-qr-btn" class="btn btn-primary mx-1">
+                    <div class="d-flex flex-column flex-sm-row justify-content-center mb-4">
+                        <button id="refresh-qr-btn" class="btn btn-primary mx-1 mb-2 mb-sm-0">
                             <i class="fas fa-sync-alt"></i> Refresh QR Code
                         </button>
                         <button id="toggle-qr-btn" class="btn btn-warning mx-1">
@@ -133,7 +133,7 @@ include 'includes/header.php';
         </div>
 
         <!-- Attendance Log Card -->
-        <div class="col-lg-6">
+        <div class="col-lg-6 col-md-12 mb-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Real-time Attendance</h6>
@@ -217,14 +217,24 @@ function generateQRCode() {
         type: 'attendance'
     });
     
-    // Generate QR code
+    // Generate QR code with responsive size
     const qr = qrcode(0, 'M');
     qr.addData(qrData);
     qr.make();
     
-    // Display QR code
-    const qrImage = qr.createImgTag(5);
+    // Calculate QR size based on container width
+    const containerWidth = $('#qr-container').width();
+    const qrSize = Math.min(containerWidth * 0.8, 300); // Limit max size
+    
+    // Display QR code with responsive size
+    const qrImage = qr.createImgTag(5, 10);
     $('#qrcode').html(qrImage);
+    
+    // Make QR code image responsive
+    $('#qrcode img').css({
+        'max-width': '100%',
+        'height': 'auto'
+    });
 }
 
 // Automatically refresh the QR code

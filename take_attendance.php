@@ -67,9 +67,9 @@ include 'includes/header.php';
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-6 mb-4">
+                        <div class="col-md-6 col-sm-12 mb-4">
                             <div class="card h-100">
-                                <div class="card-body text-center py-5">
+                                <div class="card-body text-center py-4 py-md-5">
                                     <i class="fas fa-qrcode fa-5x mb-3 text-primary"></i>
                                     <h5 class="card-title">Display QR Code</h5>
                                     <p class="card-text">Generate QR code for students to scan with their devices</p>
@@ -78,9 +78,9 @@ include 'includes/header.php';
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6 mb-4">
+                        <div class="col-md-6 col-sm-12 mb-4">
                             <div class="card h-100">
-                                <div class="card-body text-center py-5">
+                                <div class="card-body text-center py-4 py-md-5">
                                     <i class="fas fa-camera fa-5x mb-3 text-secondary"></i>
                                     <h5 class="card-title">Scan QR Codes</h5>
                                     <p class="card-text">Use your device to scan student QR codes</p>

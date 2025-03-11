@@ -68,7 +68,7 @@ include 'includes/header.php';
 
     <!-- QR Code Display Card -->
     <div class="row justify-content-center">
-        <div class="col-lg-8">
+        <div class="col-lg-8 col-md-10 col-sm-12">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary">Show QR Code to Instructor</h6>
@@ -83,7 +83,7 @@ include 'includes/header.php';
 
                     <!-- QR Code Display -->
                     <div class="qr-wrapper mb-4">
-                        <div id="qrcode" class="mx-auto text-center p-4 bg-light rounded"></div>
+                        <div id="qrcode" class="mx-auto text-center p-3 p-md-4 bg-light rounded" style="max-width: 100%; overflow: hidden;"></div>
                         <div class="text-center mt-3">
                             <p class="text-muted mb-1">Last updated: <span id="last-update">Just now</span></p>
                             <p class="text-muted">Keep this screen visible for the instructor to scan</p>
@@ -127,10 +127,13 @@ function generateQRCode() {
     // Create student data for QR code
     const studentData = {
         user_id: <?php echo $_SESSION['user_id']; ?>,
+        student_id: '<?php echo addslashes($_SESSION['user_id']); ?>', // Added for compatibility
         email: '<?php echo addslashes($student['email']); ?>',
         name: '<?php echo addslashes($student['full_name']); ?>',
         subject_id: <?php echo $subject_id; ?>,
-        timestamp: now.toISOString()
+        timestamp: now.toISOString(),
+        type: 'student_attendance', // Indicate this is a student QR
+        department: '<?php echo addslashes($student['department']); ?>'
     };
     
     // Generate QR code
@@ -138,9 +141,19 @@ function generateQRCode() {
     qr.addData(JSON.stringify(studentData));
     qr.make();
     
-    // Display QR code with larger size
-    const qrImage = qr.createImgTag(8);
+    // Calculate responsive QR size based on device
+    const containerWidth = $('#qrcode').width();
+    const qrSize = Math.min(10, Math.max(5, Math.floor(containerWidth / 40))); // Responsive QR size
+    
+    // Display QR code with responsive size
+    const qrImage = qr.createImgTag(qrSize);
     $('#qrcode').html(qrImage);
+    
+    // Make sure the image is responsive
+    $('#qrcode img').css({
+        'max-width': '100%',
+        'height': 'auto'
+    });
     
     // Update timestamp
     $('#last-update').text(now.toLocaleTimeString());
@@ -176,6 +189,11 @@ $(window).on('beforeunload', function() {
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
     }
+});
+
+// Handle window resize for responsive QR code
+$(window).on('resize', function() {
+    generateQRCode();
 });
 </script>
 

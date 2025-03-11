@@ -83,7 +83,7 @@ if ($facultyId) {
                          OR (s.start_time >= ? AND s.end_time <= ?))";
 
     $stmtFaculty = $conn->prepare($conflictFacultySql);
-    $stmtFaculty->bind_param("siissssss", $day, $facultyId, $subjectId, $scheduleId, $endTime, $startTime, $endTime, $startTime, $startTime, $endTime);
+    $stmtFaculty->bind_param("siiissssss", $day, $facultyId, $subjectId, $scheduleId, $endTime, $startTime, $endTime, $startTime, $startTime, $endTime);
     $stmtFaculty->execute();
     $facultyConflictResult = $stmtFaculty->get_result();
     

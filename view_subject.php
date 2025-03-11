@@ -177,7 +177,7 @@ $result = $conn->query($sql);
 
 <!-- QR Code Modal -->
 <div class="modal fade" id="qrCodeModal" tabindex="-1" role="dialog" aria-labelledby="qrCodeModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="qrCodeModalLabel">QR Code for Subject</h5>
@@ -186,10 +186,25 @@ $result = $conn->query($sql);
                 </button>
             </div>
             <div class="modal-body text-center">
+                <div class="mb-3">
+                    <select id="schedule-select" class="form-control mb-2">
+                        <option value="">-- Select Schedule (Optional) --</option>
+                        <?php 
+                        $scheduleQuery = "SELECT * FROM schedules WHERE subject_id = $subjectId";
+                        $scheduleResult = $conn->query($scheduleQuery);
+                        if ($scheduleResult && $scheduleResult->num_rows > 0) {
+                            while ($schedule = $scheduleResult->fetch_assoc()) {
+                                echo "<option value='{$schedule['id']}'>{$schedule['day']} ({$schedule['start_time']} - {$schedule['end_time']}) - Room {$schedule['room']}</option>";
+                            }
+                        }
+                        ?>
+                    </select>
+                </div>
                 <div id="qrcode" class="d-flex justify-content-center mb-3"></div>
                 <div class="mt-3">
                     <p><strong>Subject:</strong> <?= $subject['name'] ?> (<?= $subject['code'] ?>)</p>
                     <p><strong>Generated:</strong> <span id="qr-timestamp"></span></p>
+                    <p><strong>Expires:</strong> <span id="qr-expiry"></span></p>
                 </div>
                 <button type="button" id="refreshQrBtn" class="btn btn-primary mt-2">
                     <i class="fas fa-sync-alt"></i> Refresh QR Code
@@ -204,7 +219,7 @@ $result = $conn->query($sql);
 
 <!-- Scan QR Code Modal -->
 <div class="modal fade" id="scanQrCodeModal" tabindex="-1" role="dialog" aria-labelledby="scanQrCodeModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="scanQrCodeModalLabel">Scan QR Code</h5>
@@ -214,8 +229,18 @@ $result = $conn->query($sql);
             </div>
             <div class="modal-body">
                 <div class="text-center mb-3">
-                    <div id="scanner-container" style="width: 100%; max-width: 500px; margin: 0 auto;">
-                        <div id="reader" style="width: 100%; min-height: 300px; border-radius: 10px; overflow: hidden;"></div>
+                    <div id="scanner-container" style="width: 100%; max-width: 500px; margin: 0 auto; position: relative;">
+                        <div id="reader" style="width: 100%; min-height: 300px; border-radius: 10px; overflow: hidden; transform: scaleX(-1);"></div>
+                        
+                        <!-- Camera switch loading overlay -->
+                        <div id="camera-loading-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; border-radius: 10px;">
+                            <div class="text-center text-white">
+                                <div class="spinner-border text-light mb-2" role="status">
+                                    <span class="sr-only">Loading...</span>
+                                </div>
+                                <p>Switching camera...</p>
+                            </div>
+                        </div>
                     </div>
                     <div id="scanner-status" class="mt-2">
                         <p class="text-muted">Initializing camera...</p>
@@ -489,15 +514,27 @@ function generateQRCode() {
     const timestamp = now.toISOString();
     const readableTimestamp = now.toLocaleString();
     
-    // Display readable timestamp
+    // Set expiry time (30 seconds from now)
+    const expiryTime = new Date(now.getTime() + 30000);
+    const readableExpiry = expiryTime.toLocaleString();
+    
+    // Display readable timestamps
     $('#qr-timestamp').text(readableTimestamp);
+    $('#qr-expiry').text(readableExpiry);
+    
+    // Get selected schedule if any
+    const scheduleId = $('#schedule-select').val() ? parseInt($('#schedule-select').val()) : null;
     
     // Create QR code data with subject info and timestamp
     const qrData = JSON.stringify({
-        subject_code: '<?= $subject['code'] ?>',
-        subject_name: '<?= $subject['name'] ?>',
         subject_id: <?= $subjectId ?>,
-        timestamp: timestamp
+        subject_code: '<?= addslashes($subject['code']) ?>',
+        subject_name: '<?= addslashes($subject['name']) ?>',
+        faculty_id: <?= $_SESSION['user_id'] ?>,
+        timestamp: timestamp,
+        expires: expiryTime.toISOString(),
+        schedule_id: scheduleId,
+        type: 'attendance'
     });
     
     // Generate QR code
@@ -640,6 +677,7 @@ let html5QrCode = null;
 let cameraId = null;
 let cameraList = [];
 let scanning = false;
+let isFrontCamera = true; // Track if front camera is in use
 
 // Handle QR scanner modal events
 $('#scanQrCodeModal').on('show.bs.modal', function() {
@@ -681,12 +719,15 @@ function startScanner() {
     $('#scanner-status').html('<p class="text-primary">Starting camera...</p>');
     scanning = true;
     
-    // Improved camera configuration
+    // Improved camera configuration with front camera preference
     const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
-        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
+        videoConstraints: {
+            facingMode: "user"
+        }
     };
     
     // Start scanning
@@ -700,6 +741,8 @@ function startScanner() {
         $('#scanner-status').html('<p class="text-success">Camera active. Scanning for QR code...</p>');
         // Update button text
         $('#toggle-camera-btn').html('<i class="fas fa-video-slash"></i> Stop Camera');
+        // Check camera type and apply appropriate styling
+        checkCameraType();
     })
     .catch(err => {
         scanning = false;
@@ -707,6 +750,22 @@ function startScanner() {
         $('#toggle-camera-btn').html('<i class="fas fa-video"></i> Start Camera');
         console.error("Error starting camera", err);
     });
+}
+
+// Function to check camera type and apply appropriate styling
+function checkCameraType() {
+    // If device has multiple cameras, assume the first is front and others are back cameras
+    if (cameraList.length > 1) {
+        const currentIndex = cameraList.findIndex(camera => camera.id === cameraId);
+        isFrontCamera = currentIndex === 0;
+    }
+    
+    // Apply mirror effect only for front camera
+    if (isFrontCamera) {
+        $('#reader').css('transform', 'scaleX(-1)');
+    } else {
+        $('#reader').css('transform', 'none');
+    }
 }
 
 // Stop the scanner
@@ -730,6 +789,17 @@ function onScanSuccess(decodedText, decodedResult) {
         // Parse the QR data (assuming JSON format)
         const data = JSON.parse(decodedText);
         
+        // Validate QR code format
+        if (data.type !== 'attendance' || !data.subject_id) {
+            throw new Error('Invalid QR code format');
+        }
+        
+        // Check if QR code has expired
+        const expiryTime = new Date(data.expires);
+        if (expiryTime < new Date()) {
+            throw new Error('QR code has expired. Please ask for a new code.');
+        }
+        
         // Show success message
         $('#scanner-result').removeClass('d-none');
         $('#scanned-data').html(`
@@ -740,11 +810,34 @@ function onScanSuccess(decodedText, decodedResult) {
         
         // Handle attendance recording
         $('#record-attendance-btn').on('click', function() {
-            // Add code here to record the attendance via AJAX
-            Swal.fire({
-                title: 'Attendance Recorded',
-                text: 'Student attendance has been recorded successfully',
-                icon: 'success'
+            const attendanceData = {
+                subject_id: data.subject_id,
+                schedule_id: data.schedule_id || null,
+                student_id: <?= $_SESSION['user_id'] ?>,
+                timestamp: new Date().toISOString()
+            };
+            
+            $.ajax({
+                url: 'process_attendance.php',
+                type: 'POST',
+                data: attendanceData,
+                dataType: 'json',
+                success: function(response) {
+                    if (response.status === 'success') {
+                        Swal.fire({
+                            title: 'Attendance Recorded',
+                            text: 'Student attendance has been recorded successfully',
+                            icon: 'success'
+                        }).then(() => {
+                            $('#scanQrCodeModal').modal('hide');
+                        });
+                    } else {
+                        Swal.fire('Error', response.message || 'Failed to record attendance', 'error');
+                    }
+                },
+                error: function() {
+                    Swal.fire('Error', 'An error occurred while processing your request', 'error');
+                }
             });
         });
         
@@ -753,7 +846,7 @@ function onScanSuccess(decodedText, decodedResult) {
             .find('.alert')
             .removeClass('alert-success')
             .addClass('alert-danger')
-            .html(`<h5>Invalid QR Code</h5><p>The scanned QR code is not valid for this system.</p>`);
+            .html(`<h5>Invalid QR Code</h5><p>${error.message || 'The scanned QR code is not valid for this system.'}</p>`);
     }
 }
 
@@ -775,6 +868,7 @@ $('#toggle-camera-btn').on('click', function() {
     }
 });
 
+// Updated camera switch button handler with animation
 $('#change-camera-btn').on('click', function() {
     if (cameraList.length <= 1) {
         Swal.fire('No Alternative Cameras', 'No other cameras are available on this device', 'info');
@@ -786,11 +880,55 @@ $('#change-camera-btn').on('click', function() {
     const nextIndex = (currentIndex + 1) % cameraList.length;
     cameraId = cameraList[nextIndex].id;
     
-    // Restart scanner with new camera
-    if (scanning) {
-        stopScanner();
-        startScanner();
+    // Only switch if currently scanning
+    if (scanning && html5QrCode) {
+        // Update status and show loading overlay with fade in effect
+        $('#scanner-status').html(`<p class="text-primary">Switching to camera ${nextIndex + 1}...</p>`);
+        $('#camera-loading-overlay').css('display', 'flex').fadeIn(300);
+        
+        // Disable the button during transition to prevent multiple clicks
+        $(this).prop('disabled', true);
+        
+        // Stop current camera then immediately start new one
+        html5QrCode.stop().then(() => {
+            // Configuration for scanner
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0,
+                formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+            };
+            
+            // Immediately start the new camera
+            return html5QrCode.start(cameraId, config, onScanSuccess, onScanFailure);
+        })
+        .then(() => {
+            // Hide loading overlay with fade effect
+            $('#camera-loading-overlay').fadeOut(300);
+            $('#scanner-status').html('<p class="text-success">Camera switched. Scanning for QR code...</p>');
+            // Re-enable the button
+            $('#change-camera-btn').prop('disabled', false);
+            // Check camera type and apply appropriate styling
+            checkCameraType();
+        })
+        .catch(err => {
+            // Hide loading overlay if there's an error
+            $('#camera-loading-overlay').fadeOut(300);
+            scanning = false;
+            $('#scanner-status').html(`<p class="text-danger">Error switching camera: ${err}</p>`);
+            $('#toggle-camera-btn').html('<i class="fas fa-video"></i> Start Camera');
+            $('#change-camera-btn').prop('disabled', false);
+            console.error("Error during camera switch", err);
+        });
+    } else {
+        // If not scanning, just update the selected camera
+        $('#scanner-status').html(`<p class="text-info">Selected camera ${nextIndex + 1}. Press "Start Camera" to begin.</p>`);
     }
+});
+
+// Schedule change affects QR code
+$('#schedule-select').on('change', function() {
+    generateQRCode();
 });
 </script>
 

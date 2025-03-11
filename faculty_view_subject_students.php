@@ -55,9 +55,6 @@ include 'includes/header.php';
             <a href="faculty_subjects.php" class="btn btn-secondary">
                 <i class="fas fa-arrow-left mr-1"></i> Back to Subjects
             </a>
-            <button class="btn btn-primary" data-toggle="modal" data-target="#addStudentModal">
-                <i class="fas fa-user-plus mr-1"></i> Add Student
-            </button>
         </div>
     </div>
 
@@ -142,41 +139,6 @@ include 'includes/header.php';
 </div>
 <!-- /.container-fluid -->
 
-<!-- Add Student Modal -->
-<div class="modal fade" id="addStudentModal" tabindex="-1" role="dialog" aria-labelledby="addStudentModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addStudentModalLabel">Add Student to <?php echo htmlspecialchars($subject['code']); ?></h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <form id="addStudentForm">
-                    <div class="form-group">
-                        <label for="studentSearch">Search Student</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="studentSearch" placeholder="Enter student name or ID">
-                            <div class="input-group-append">
-                                <button class="btn btn-primary" type="button" id="searchBtn">
-                                    <i class="fas fa-search"></i> Search
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="search-results mt-3" id="searchResults">
-                        <!-- Search results will appear here -->
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- View Attendance History Modal -->
 <div class="modal fade" id="attendanceHistoryModal" tabindex="-1" role="dialog" aria-labelledby="attendanceHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
@@ -204,110 +166,9 @@ include 'includes/header.php';
 
 <script>
 $(document).ready(function() {
-    // Initialize DataTable with default options
+    // Initialize DataTable
     $('#studentsTable').DataTable();
-
-    // Handle student search
-    $('#searchBtn').click(function() {
-        const searchTerm = $('#studentSearch').val().trim();
-        if (searchTerm.length < 2) {
-            Swal.fire({
-                title: 'Search Error',
-                text: 'Please enter at least 2 characters to search',
-                icon: 'error'
-            });
-            return;
-        }
-
-        // Perform AJAX search for students
-        $.ajax({
-            url: 'search_students.php',
-            type: 'POST',
-            data: {
-                search: searchTerm,
-                subject_id: <?php echo $subject_id; ?>
-            },
-            dataType: 'json',
-            success: function(response) {
-                displaySearchResults(response);
-            },
-            error: function() {
-                Swal.fire({
-                    title: 'Error',
-                    text: 'Failed to search for students',
-                    icon: 'error'
-                });
-            }
-        });
-    });
 });
-
-// Display search results
-function displaySearchResults(results) {
-    const resultsDiv = $('#searchResults');
-    resultsDiv.empty();
-
-    if (results.length === 0) {
-        resultsDiv.html('<div class="alert alert-info">No students found matching your search.</div>');
-        return;
-    }
-
-    let html = '<div class="list-group">';
-    results.forEach(student => {
-        const fullName = `${student.lastname}, ${student.firstname} ${student.middle_init || ''}`;
-        html += `
-            <div class="list-group-item d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>${fullName}</strong><br>
-                    <small class="text-muted">${student.email} - ${student.department}</small>
-                </div>
-                <button class="btn btn-sm btn-primary" onclick="addStudentToSubject(${student.id})">
-                    <i class="fas fa-plus"></i> Add
-                </button>
-            </div>
-        `;
-    });
-    html += '</div>';
-    resultsDiv.html(html);
-}
-
-// Add student to subject
-function addStudentToSubject(studentId) {
-    $.ajax({
-        url: 'process_enrollment.php',
-        type: 'POST',
-        data: {
-            action: 'add',
-            student_id: studentId,
-            subject_id: <?php echo $subject_id; ?>
-        },
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                Swal.fire({
-                    title: 'Success',
-                    text: response.message,
-                    icon: 'success'
-                }).then(() => {
-                    location.reload();
-                });
-            } else {
-                Swal.fire({
-                    title: 'Error',
-                    text: response.message,
-                    icon: 'error'
-                });
-            }
-        },
-        error: function() {
-            Swal.fire({
-                title: 'Error',
-                text: 'Failed to add student to subject',
-                icon: 'error'
-            });
-        }
-    });
-}
 
 // Remove student from subject
 function removeStudent(studentId, studentName) {

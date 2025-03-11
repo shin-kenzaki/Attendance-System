@@ -54,7 +54,8 @@ $studentName = $student['firstname'] . ' ' . ($student['middle_init'] ? $student
 // Get attendance records
 $attendanceQuery = "SELECT a.*, s.day, s.room, s.start_time, s.end_time 
                   FROM attendances a 
-                  LEFT JOIN schedules s ON a.schedule_id = s.id
+                  LEFT JOIN subjects sub ON a.subject_id = sub.id
+                  LEFT JOIN schedules s ON sub.id = s.subject_id
                   WHERE a.user_id = ? AND a.subject_id = ?
                   ORDER BY a.time_in DESC";
 $attendanceStmt = $conn->prepare($attendanceQuery);
@@ -122,4 +123,4 @@ $attendanceResult = $attendanceStmt->get_result();
     </div>
 <?php endif; ?>
 
-<?php $conn->close(); ?>
+<?php $conn->close(); ?>.
