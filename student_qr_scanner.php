@@ -20,6 +20,21 @@ if ($subject_id === 0) {
     exit();
 }
 
+// Check if attendance already recorded today
+$today_start = date('Y-m-d 00:00:00');
+$today_end = date('Y-m-d 23:59:59');
+$user_id = $_SESSION['user_id'];
+
+$attendance_query = "SELECT a.*, TIME_FORMAT(a.time_in, '%h:%i %p') as formatted_time 
+                     FROM attendances a 
+                     WHERE a.user_id = ? AND a.subject_id = ? AND a.time_in BETWEEN ? AND ?";
+$attendance_stmt = $conn->prepare($attendance_query);
+$attendance_stmt->bind_param("iiss", $user_id, $subject_id, $today_start, $today_end);
+$attendance_stmt->execute();
+$attendance_result = $attendance_stmt->get_result();
+$has_attendance = $attendance_result->num_rows > 0;
+$attendance_data = $has_attendance ? $attendance_result->fetch_assoc() : null;
+
 // Get subject information
 $query = "SELECT s.*, sch.day, sch.start_time, sch.end_time, sch.room
           FROM subjects s
@@ -72,8 +87,14 @@ include 'includes/header.php';
         <div class="col-lg-8 col-md-10 col-sm-12">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary">Scan Instructor's QR Code</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <?php echo $has_attendance ? 'Attendance Already Recorded' : 'Scan Instructor\'s QR Code'; ?>
+                    </h6>
+                    <?php if (!$has_attendance): ?>
                     <span id="scanner-status-badge" class="badge badge-warning">Initializing...</span>
+                    <?php else: ?>
+                    <span class="badge badge-success">Present</span>
+                    <?php endif; ?>
                 </div>
                 <div class="card-body">
                     <!-- Student Info -->
@@ -82,6 +103,25 @@ include 'includes/header.php';
                         <p class="text-muted mb-0">Email: <?php echo htmlspecialchars($student['email']); ?></p>
                     </div>
 
+                    <?php if ($has_attendance): ?>
+                    <!-- Attendance Already Recorded Message -->
+                    <div class="text-center my-5">
+                        <div class="mb-4">
+                            <i class="fas fa-check-circle text-success fa-5x"></i>
+                        </div>
+                        <h4 class="mb-3">Your attendance has already been recorded today!</h4>
+                        <div class="card bg-light mb-4 mx-auto" style="max-width: 400px;">
+                            <div class="card-body">
+                                <p class="mb-1"><strong>Date:</strong> <?php echo date('F d, Y', strtotime($attendance_data['time_in'])); ?></p>
+                                <p class="mb-1"><strong>Time:</strong> <?php echo $attendance_data['formatted_time']; ?></p>
+                                <p class="mb-0"><strong>Status:</strong> <span class="badge badge-success">Present</span></p>
+                            </div>
+                        </div>
+                        <a href="add_attendance.php?subject_id=<?php echo $subject_id; ?>" class="btn btn-primary">
+                            <i class="fas fa-arrow-left mr-1"></i> Back to Attendance Options
+                        </a>
+                    </div>
+                    <?php else: ?>
                     <!-- Scanner Container -->
                     <div class="scanner-wrapper mb-4">
                         <div id="scanner-container" class="mx-auto position-relative" 
@@ -117,6 +157,7 @@ include 'includes/header.php';
                         <i class="fas fa-info-circle mr-2"></i>
                         Point your camera at the instructor's QR code to mark your attendance.
                     </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -127,6 +168,7 @@ include 'includes/header.php';
 
 <?php include 'includes/footer.php'; ?>
 
+<?php if (!$has_attendance): ?>
 <!-- QR Scanner Scripts -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
@@ -157,7 +199,16 @@ function initializeScanner() {
     Html5Qrcode.getCameras().then(devices => {
         if (devices && devices.length) {
             cameraList = devices;
-            cameraId = devices[0].id;
+            // Select back camera by default (usually the second camera in the list)
+            if (devices.length > 1) {
+                // If multiple cameras, select the second one (usually back camera)
+                cameraId = devices[1].id;
+                isFrontCamera = false;
+            } else {
+                // If only one camera, use that
+                cameraId = devices[0].id;
+                isFrontCamera = true;
+            }
             startScanner();
         } else {
             $('#scan-status').html('<p class="text-danger">No cameras found. Please connect a camera to continue.</p>');
@@ -249,7 +300,7 @@ function stopScanner() {
     }
 }
 
-// Handle successful scan
+// Handle successful scan - update for better error handling and data validation
 function onScanSuccess(decodedText, decodedResult) {
     // Play success sound
     if (successAudio) {
@@ -260,8 +311,13 @@ function onScanSuccess(decodedText, decodedResult) {
         const data = JSON.parse(decodedText);
         
         // Validate that this is a faculty attendance QR code
-        if (data.type !== 'attendance' || !data.subject_id || data.subject_id != <?php echo $subject_id; ?>) {
+        if (data.type !== 'attendance' || !data.subject_id) {
             throw new Error('Invalid QR code for this subject');
+        }
+        
+        // Ensure the subject IDs match
+        if (parseInt(data.subject_id) !== <?php echo $subject_id; ?>) {
+            throw new Error('This QR code is for a different subject');
         }
         
         // Check if QR code has expired
@@ -287,12 +343,12 @@ function onScanSuccess(decodedText, decodedResult) {
     }
 }
 
-// Submit attendance to server
+// Submit attendance to server - update to handle schedule_id properly
 function submitAttendance(qrData) {
     const attendanceData = {
         subject_id: qrData.subject_id,
-        schedule_id: qrData.schedule_id,
-        student_id: <?php echo $_SESSION['user_id']; ?>,
+        schedule_id: qrData.schedule_id || null,
+        user_id: <?php echo $_SESSION['user_id']; ?>, // Changed from student_id to user_id for consistency
         timestamp: new Date().toISOString()
     };
     
@@ -303,14 +359,120 @@ function submitAttendance(qrData) {
         dataType: 'json',
         success: function(response) {
             if (response.status === 'success') {
+                // Stop the scanner to prevent multiple scans
+                stopScanner();
+                
+                // Hide scanner UI
+                $('#scanner-container, #scan-status, .d-flex.flex-column.flex-sm-row, .alert.alert-info').hide();
+                
+                // Show animated success check
+                $('div.card-body').prepend(`
+                    <div class="success-animation text-center my-5">
+                        <div class="checkmark-circle">
+                            <div class="checkmark-circle-bg"></div>
+                            <div class="checkmark draw"></div>
+                        </div>
+                        <h3 class="mt-4 text-success">Attendance Recorded!</h3>
+                        <p>Your attendance has been successfully recorded</p>
+                        <div class="mt-3 redirect-countdown">Completing in <span id="countdown">3</span> seconds...</div>
+                    </div>
+                `);
+                
+                // Add CSS for check animation to the page
+                $('head').append(`
+                    <style>
+                        .checkmark-circle {
+                            width: 150px;
+                            height: 150px;
+                            position: relative;
+                            display: inline-block;
+                            vertical-align: top;
+                            margin-left: auto;
+                            margin-right: auto;
+                        }
+                        .checkmark-circle-bg {
+                            border-radius: 50%;
+                            position: absolute;
+                            width: 150px;
+                            height: 150px;
+                            background-color: #4CAF50;
+                            animation: fill-bg .4s ease-in-out;
+                        }
+                        .checkmark {
+                            border-radius: 0;
+                            stroke-width: 6;
+                            stroke: #fff;
+                            stroke-miterlimit: 10;
+                            box-shadow: inset 0px 0px 0px #4CAF50;
+                            animation: stroke .6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+                            position: relative;
+                            width: 150px;
+                            height: 150px;
+                        }
+                        .checkmark.draw:after {
+                            content: '';
+                            transform: scaleX(-1) rotate(135deg);
+                            transform-origin: left top;
+                            border-right: 25px solid #fff;
+                            border-top: 25px solid #fff;
+                            position: absolute;
+                            left: 30px;
+                            top: 60px;
+                            width: 60px;
+                            height: 30px;
+                            animation: check-draw .5s ease-in-out .7s forwards;
+                            opacity: 0;
+                        }
+                        @keyframes stroke {
+                            100% {
+                                stroke-dashoffset: 0;
+                            }
+                        }
+                        @keyframes fill-bg {
+                            0% { transform: scale(0); }
+                            100% { transform: scale(1); }
+                        }
+                        @keyframes check-draw {
+                            0% { opacity: 0; }
+                            100% { opacity: 1; }
+                        }
+                        .redirect-countdown {
+                            color: #6c757d;
+                            font-size: 0.9rem;
+                        }
+                    </style>
+                `);
+                
+                // Countdown timer
+                let seconds = 3;
+                const countdownInterval = setInterval(function() {
+                    seconds--;
+                    $('#countdown').text(seconds);
+                    
+                    if (seconds <= 0) {
+                        clearInterval(countdownInterval);
+                        // Replace countdown with completion message and back button
+                        $('.redirect-countdown').fadeOut(200, function() {
+                            $(this).html(`
+                                <div class="mt-4">
+                                    <p class="text-success mb-3"><i class="fas fa-check-circle"></i> Attendance successfully recorded!</p>
+                                    <a href="add_attendance.php?subject_id=<?php echo $subject_id; ?>" class="btn btn-primary">
+                                        <i class="fas fa-arrow-left mr-1"></i> Back to Attendance Options
+                                    </a>
+                                </div>
+                            `).fadeIn(300);
+                        });
+                    }
+                }, 1000);
+                
+            } else if (response.status === 'warning') {
                 Swal.fire({
-                    title: 'Attendance Recorded!',
-                    text: 'Your attendance has been successfully recorded.',
-                    icon: 'success',
+                    title: 'Already Recorded',
+                    text: 'Your attendance for today has already been recorded.',
+                    icon: 'info',
                     timer: 2000,
                     showConfirmButton: false
                 }).then(() => {
-                    // Redirect back to subject page
                     window.location.href = 'add_attendance.php?subject_id=' + <?php echo $subject_id; ?>;
                 });
             } else {
@@ -318,7 +480,8 @@ function submitAttendance(qrData) {
                 startScanner(); // Resume scanning
             }
         },
-        error: function() {
+        error: function(xhr, status, error) {
+            console.error("AJAX Error:", status, error);
             handleError('Server error. Please try again.');
             startScanner(); // Resume scanning
         }
@@ -413,10 +576,38 @@ function onScanFailure(error) {
 $(window).on('resize', function() {
     if (scanning) {
         stopScanner();
-        startScanner();
+        // Add small delay to ensure DOM is fully updated
+        setTimeout(() => {
+            startScanner();
+        }, 200);
     }
 });
+
+// Add event listener for sidebar toggle
+$("#sidebarToggle, #sidebarToggleTop").on('click', function() {
+    if (scanning) {
+        // Add delay to let the sidebar animation complete
+        setTimeout(() => {
+            updateScannerDimensions();
+        }, 300);
+    }
+});
+
+// Function to update scanner dimensions without restarting
+function updateScannerDimensions() {
+    if (html5QrCode && scanning) {
+        const scannerWidth = $('#scanner-container').width();
+        const qrboxSize = Math.min(scannerWidth * 0.7, 250);
+        
+        // Gracefully stop and restart with new dimensions
+        stopScanner();
+        setTimeout(() => {
+            startScanner();
+        }, 100);
+    }
+}
 </script>
+<?php endif; ?>
 
 </body>
 </html>

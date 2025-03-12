@@ -20,6 +20,21 @@ if ($subject_id === 0) {
     exit();
 }
 
+// Check if attendance already recorded today
+$today_start = date('Y-m-d 00:00:00');
+$today_end = date('Y-m-d 23:59:59');
+$user_id = $_SESSION['user_id'];
+
+$attendance_query = "SELECT a.*, TIME_FORMAT(a.time_in, '%h:%i %p') as formatted_time 
+                     FROM attendances a 
+                     WHERE a.user_id = ? AND a.subject_id = ? AND a.time_in BETWEEN ? AND ?";
+$attendance_stmt = $conn->prepare($attendance_query);
+$attendance_stmt->bind_param("iiss", $user_id, $subject_id, $today_start, $today_end);
+$attendance_stmt->execute();
+$attendance_result = $attendance_stmt->get_result();
+$has_attendance = $attendance_result->num_rows > 0;
+$attendance_data = $has_attendance ? $attendance_result->fetch_assoc() : null;
+
 // Get subject information
 $query = "SELECT s.*, sch.day, sch.start_time, sch.end_time, sch.room
           FROM subjects s
@@ -71,8 +86,14 @@ include 'includes/header.php';
         <div class="col-lg-8 col-md-10 col-sm-12">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary">Show QR Code to Instructor</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <?php echo $has_attendance ? 'Attendance Already Recorded' : 'Show QR Code to Instructor'; ?>
+                    </h6>
+                    <?php if (!$has_attendance): ?>
                     <span id="qr-refresh-badge" class="badge badge-success">Active</span>
+                    <?php else: ?>
+                    <span class="badge badge-success">Present</span>
+                    <?php endif; ?>
                 </div>
                 <div class="card-body">
                     <!-- Student Info -->
@@ -81,6 +102,25 @@ include 'includes/header.php';
                         <p class="text-muted mb-0">Email: <?php echo htmlspecialchars($student['email']); ?></p>
                     </div>
 
+                    <?php if ($has_attendance): ?>
+                    <!-- Attendance Already Recorded Message -->
+                    <div class="text-center my-5">
+                        <div class="mb-4">
+                            <i class="fas fa-check-circle text-success fa-5x"></i>
+                        </div>
+                        <h4 class="mb-3">Your attendance has already been recorded today!</h4>
+                        <div class="card bg-light mb-4 mx-auto" style="max-width: 400px;">
+                            <div class="card-body">
+                                <p class="mb-1"><strong>Date:</strong> <?php echo date('F d, Y', strtotime($attendance_data['time_in'])); ?></p>
+                                <p class="mb-1"><strong>Time:</strong> <?php echo $attendance_data['formatted_time']; ?></p>
+                                <p class="mb-0"><strong>Status:</strong> <span class="badge badge-success">Present</span></p>
+                            </div>
+                        </div>
+                        <a href="add_attendance.php?subject_id=<?php echo $subject_id; ?>" class="btn btn-primary">
+                            <i class="fas fa-arrow-left mr-1"></i> Back to Attendance Options
+                        </a>
+                    </div>
+                    <?php else: ?>
                     <!-- QR Code Display -->
                     <div class="qr-wrapper mb-4">
                         <div id="qrcode" class="mx-auto text-center p-3 p-md-4 bg-light rounded" style="max-width: 100%; overflow: hidden;"></div>
@@ -95,6 +135,7 @@ include 'includes/header.php';
                         <i class="fas fa-info-circle mr-2"></i>
                         This QR code updates automatically every 30 seconds. Please keep the screen on and visible.
                     </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -104,6 +145,7 @@ include 'includes/header.php';
 
 <?php include 'includes/footer.php'; ?>
 
+<?php if (!$has_attendance): ?>
 <!-- QR Code library -->
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 
@@ -124,16 +166,16 @@ function generateQRCode() {
     // Get current timestamp
     const now = new Date();
     
-    // Create student data for QR code
+    // Create student data for QR code with standard format
     const studentData = {
         user_id: <?php echo $_SESSION['user_id']; ?>,
-        student_id: '<?php echo addslashes($_SESSION['user_id']); ?>', // Added for compatibility
+        student_id: '<?php echo addslashes($student["student_id"] ?? $_SESSION['user_id']); ?>',
         email: '<?php echo addslashes($student['email']); ?>',
         name: '<?php echo addslashes($student['full_name']); ?>',
         subject_id: <?php echo $subject_id; ?>,
         timestamp: now.toISOString(),
         type: 'student_attendance', // Indicate this is a student QR
-        department: '<?php echo addslashes($student['department']); ?>'
+        department: '<?php echo addslashes($student['department'] ?? ""); ?>'
     };
     
     // Generate QR code
@@ -196,6 +238,7 @@ $(window).on('resize', function() {
     generateQRCode();
 });
 </script>
+<?php endif; ?>
 
 </body>
 </html>

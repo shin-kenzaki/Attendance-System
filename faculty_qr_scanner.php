@@ -54,6 +54,23 @@ if ($schedule_result->num_rows > 0) {
     $current_schedule = $schedule_result->fetch_assoc();
 }
 
+// Get today's attendance records for this subject
+$today_start = date('Y-m-d 00:00:00');
+$today_end = date('Y-m-d 23:59:59');
+
+$attendance_query = "SELECT a.*, u.id as user_id, 
+                     CONCAT(u.firstname, ' ', COALESCE(u.middle_init, ''), ' ', u.lastname) as student_name,
+                     TIME_FORMAT(a.time_in, '%h:%i %p') as formatted_time
+                     FROM attendances a 
+                     JOIN users u ON a.user_id = u.id
+                     WHERE a.subject_id = ? AND a.time_in BETWEEN ? AND ?
+                     ORDER BY a.time_in DESC";
+$attendance_stmt = $conn->prepare($attendance_query);
+$attendance_stmt->bind_param("iss", $subject_id, $today_start, $today_end);
+$attendance_stmt->execute();
+$attendance_result = $attendance_stmt->get_result();
+$attendance_count = $attendance_result->num_rows;
+
 // Include common header
 include 'includes/header.php';
 ?>
@@ -140,29 +157,51 @@ include 'includes/header.php';
         <div class="col-lg-6 col-md-12 mb-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Attendance Log</h6>
-                    <div>
-                        <span id="attendance-count" class="badge badge-primary mr-2">0</span>
-                        <button id="export-csv-btn" class="btn btn-sm btn-outline-secondary" disabled>
+                    <h6 class="m-0 font-weight-bold text-primary">Today's Attendance</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="d-flex align-items-center mr-3">
+                            <span id="attendance-count" class="badge badge-primary mr-2"><?php echo $attendance_count; ?></span>
+                            <div id="refresh-indicator" class="spinner-border spinner-border-sm text-primary d-none" role="status">
+                                <span class="sr-only">Loading...</span>
+                            </div>
+                        </div>
+                        <button id="export-csv-btn" class="btn btn-sm btn-outline-secondary" <?php echo ($attendance_count > 0) ? '' : 'disabled'; ?>>
                             <i class="fas fa-download mr-1"></i> Export CSV
                         </button>
                     </div>
                 </div>
                 <div class="card-body">
+                    <div class="text-center mb-2 text-muted small">
+                        <span>Last updated: <span id="last-updated-time"><?php echo date('h:i:s A'); ?></span></span>
+                        <button id="refresh-now-btn" class="btn btn-link btn-sm text-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh Now
+                        </button>
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-bordered" id="attendance-table" width="100%" cellspacing="0">
                             <thead>
                                 <tr>
-                                    <th>Student ID</th>
-                                    <th>Name</th>
-                                    <th>Timestamp</th>
+                                    <th class="sorting" data-sort="student_id">Student ID <i class="fas fa-sort ml-1"></i></th>
+                                    <th class="sorting" data-sort="name">Name <i class="fas fa-sort ml-1"></i></th>
+                                    <th class="sorting" data-sort="time_in">Time <i class="fas fa-sort ml-1"></i></th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="attendance-log">
-                                <tr id="empty-log-row">
-                                    <td colspan="4" class="text-center">No attendance records yet.</td>
-                                </tr>
+                                <?php if ($attendance_count > 0): ?>
+                                    <?php while ($attendance = $attendance_result->fetch_assoc()): ?>
+                                    <tr data-user-id="<?php echo $attendance['user_id']; ?>">
+                                        <td><?php echo htmlspecialchars($attendance['user_id']); ?></td>
+                                        <td><?php echo htmlspecialchars($attendance['student_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($attendance['formatted_time']); ?></td>
+                                        <td><span class="badge badge-success">Present</span></td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                <?php else: ?>
+                                    <tr id="empty-log-row">
+                                        <td colspan="4" class="text-center">No attendance records yet today.</td>
+                                    </tr>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -187,13 +226,139 @@ let cameraList = [];
 let scanning = false;
 let attendanceLog = [];
 let isFrontCamera = true; // Track if front camera is in use
+let refreshInterval = null;
+let currentSort = { column: 'time_in', direction: 'desc' };
 const subject_id = <?php echo $subject_id; ?>;
 const schedule_id = <?php echo $current_schedule ? $current_schedule['id'] : 'null'; ?>;
 
 // Initialize on page load
 $(document).ready(function() {
     initializeScanner();
+    loadInitialAttendanceData();
+    startAutoRefresh();
+    setupSorting();
+    
+    // Manual refresh button handler
+    $('#refresh-now-btn').on('click', function() {
+        refreshAttendanceData();
+    });
 });
+
+// Load initial attendance data
+function loadInitialAttendanceData() {
+    <?php if ($attendance_count > 0): ?>
+    // Reset the result pointer
+    <?php $attendance_result->data_seek(0); ?>
+    // Initialize attendance log array
+    attendanceLog = [
+        <?php 
+        $first = true;
+        while ($attendance = $attendance_result->fetch_assoc()): 
+        if (!$first) echo ',';
+        $first = false;
+        ?>
+        {
+            user_id: <?php echo $attendance['user_id']; ?>,
+            student_id: "<?php echo addslashes($attendance['user_id']); ?>",
+            name: "<?php echo addslashes($attendance['student_name']); ?>",
+            timestamp: "<?php echo addslashes($attendance['formatted_time']); ?>",
+            raw_timestamp: "<?php echo addslashes($attendance['time_in']); ?>"
+        },
+        <?php endwhile; ?>
+    ];
+    <?php endif; ?>
+    
+    // Enable export button if we have records
+    if (attendanceLog.length > 0) {
+        $('#export-csv-btn').prop('disabled', false);
+    }
+}
+
+// Start automatic refresh of attendance data
+function startAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    
+    // Refresh attendance data every 30 seconds
+    refreshInterval = setInterval(function() {
+        refreshAttendanceData();
+    }, 30000); // 30 seconds
+}
+
+// Refresh attendance data via AJAX
+function refreshAttendanceData() {
+    // Show loading indicator
+    $('#refresh-indicator').removeClass('d-none');
+    
+    // Get latest attendance data from server
+    $.ajax({
+        url: 'get_attendance_data.php',
+        type: 'GET',
+        data: {
+            subject_id: subject_id,
+            today_only: true
+        },
+        dataType: 'json',
+        success: function(response) {
+            if (response.status === 'success') {
+                // Update the table with new data
+                updateAttendanceTable(response.data);
+                
+                // Update last updated time
+                $('#last-updated-time').text(new Date().toLocaleTimeString());
+            } else {
+                console.error("Error refreshing attendance data:", response.message);
+            }
+            
+            // Hide loading indicator
+            $('#refresh-indicator').addClass('d-none');
+        },
+        error: function(xhr, status, error) {
+            console.error("AJAX Error:", status, error);
+            $('#refresh-indicator').addClass('d-none');
+        }
+    });
+}
+
+// Update attendance table with new data
+function updateAttendanceTable(data) {
+    if (!data || !Array.isArray(data)) return;
+    
+    // Update attendance log with new data
+    attendanceLog = data;
+    
+    // Clear table
+    $('#attendance-log').empty();
+    
+    // Update count
+    $('#attendance-count').text(data.length);
+    
+    // Enable/disable export button
+    $('#export-csv-btn').prop('disabled', data.length === 0);
+    
+    // If no records
+    if (data.length === 0) {
+        $('#attendance-log').html('<tr id="empty-log-row"><td colspan="4" class="text-center">No attendance records yet today.</td></tr>');
+        return;
+    }
+    
+    // Sort the data before displaying
+    sortAttendanceData();
+    
+    // Populate table
+    attendanceLog.forEach(record => {
+        const newRow = `
+            <tr data-user-id="${record.user_id}">
+                <td>${record.student_id || record.user_id}</td>
+                <td>${record.name}</td>
+                <td>${record.timestamp || formatTime(record.raw_timestamp)}</td>
+                <td><span class="badge badge-success">Present</span></td>
+            </tr>
+        `;
+        $('#attendance-log').append(newRow);
+    });
+}
 
 // Initialize the scanner
 function initializeScanner() {
@@ -206,7 +371,16 @@ function initializeScanner() {
     Html5Qrcode.getCameras().then(devices => {
         if (devices && devices.length) {
             cameraList = devices;
-            cameraId = devices[0].id;
+            // Select back camera by default (usually the second camera in the list)
+            if (devices.length > 1) {
+                // If multiple cameras, select the second one (usually back camera)
+                cameraId = devices[1].id;
+                isFrontCamera = false;
+            } else {
+                // If only one camera, use that
+                cameraId = devices[0].id;
+                isFrontCamera = true;
+            }
             startScanner();
         } else {
             $('#scanner-status').html('<p class="text-danger">No cameras found. Please connect a camera to continue.</p>');
@@ -290,11 +464,11 @@ function stopScanner() {
     }
 }
 
-// Handle successful scan
+// Handle successful scan - add better type checking and validation
 function onScanSuccess(decodedText, decodedResult) {
     // Play a success sound
     const successAudio = new Audio('assets/sounds/beep-success.mp3');
-    successAudio.play();
+    successAudio.play().catch(err => console.log('Error playing sound:', err));
     
     try {
         // Try to parse the QR data (expecting JSON with student information)
@@ -306,7 +480,7 @@ function onScanSuccess(decodedText, decodedResult) {
         }
         
         // Check if this QR is for the correct subject
-        if (data.subject_id != subject_id) {
+        if (parseInt(data.subject_id) !== parseInt(subject_id)) {
             throw new Error('This QR code is for a different subject');
         }
         
@@ -362,7 +536,7 @@ function recordAttendance(studentData) {
         timestamp: new Date().toISOString(),
         student_data: JSON.stringify({
             name: studentData.name,
-            email: studentData.email,
+            email: studentData.email || '',
             department: studentData.department || ''
         })
     };
@@ -378,7 +552,7 @@ function recordAttendance(studentData) {
                 // Add record to the attendance log
                 const record = {
                     user_id: studentData.user_id,
-                    student_id: studentData.student_id || 'N/A',
+                    student_id: studentData.student_id || studentData.user_id || 'N/A',
                     name: studentData.name,
                     timestamp: new Date().toLocaleTimeString(),
                     status: 'Present'
@@ -397,6 +571,17 @@ function recordAttendance(studentData) {
                 
                 // Update scanner status
                 $('#scanner-status').html('<p class="text-success">Attendance recorded! Ready for next scan.</p>');
+            } else if (response.status === 'info') {
+                // Already recorded today
+                Swal.fire({
+                    title: 'Already Recorded',
+                    text: `${studentData.name} attendance was already recorded today`,
+                    icon: 'info',
+                    timer: 2000,
+                    timerProgressBar: true,
+                    showConfirmButton: false
+                });
+                $('#scanner-status').html('<p class="text-info">Attendance already recorded. Ready for next scan.</p>');
             } else {
                 // Handle error
                 Swal.fire('Error', response.message || 'Failed to record attendance', 'error');
@@ -408,6 +593,9 @@ function recordAttendance(studentData) {
             $('#scanner-status').html('<p class="text-danger">Server error. Try again.</p>');
         }
     });
+    
+    // After successful scan, refresh the attendance data
+    setTimeout(refreshAttendanceData, 1000);
 }
 
 // Add attendance record to the log table
@@ -436,6 +624,66 @@ function addAttendanceRecord(record) {
     if (attendanceLog.length > 0) {
         $('#export-csv-btn').prop('disabled', false);
     }
+}
+
+// Format time for display
+function formatTime(timeString) {
+    if (!timeString) return '';
+    return new Date(timeString).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
+// Set up table sorting
+function setupSorting() {
+    $('.sorting').on('click', function() {
+        const column = $(this).data('sort');
+        
+        // Toggle direction if same column is clicked
+        if (currentSort.column === column) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort.column = column;
+            currentSort.direction = 'asc';
+        }
+        
+        // Update sort indicators
+        $('.sorting').find('i').attr('class', 'fas fa-sort ml-1');
+        $(this).find('i').attr('class', 'fas fa-sort-' + 
+            (currentSort.direction === 'asc' ? 'up' : 'down') + ' ml-1');
+            
+        // Sort and redraw the table
+        sortAttendanceData();
+        updateAttendanceTable(attendanceLog);
+    });
+}
+
+// Sort attendance data based on current sort settings
+function sortAttendanceData() {
+    if (!attendanceLog || attendanceLog.length === 0) return;
+    
+    attendanceLog.sort((a, b) => {
+        let valA, valB;
+        
+        switch (currentSort.column) {
+            case 'student_id':
+                valA = a.student_id || a.user_id;
+                valB = b.student_id || b.user_id;
+                break;
+            case 'name':
+                valA = a.name;
+                valB = b.name;
+                break;
+            case 'time_in':
+                valA = a.raw_timestamp || a.timestamp;
+                valB = b.raw_timestamp || b.timestamp;
+                break;
+            default:
+                return 0;
+        }
+        
+        // Direction check
+        const compareResult = valA > valB ? 1 : (valA < valB ? -1 : 0);
+        return currentSort.direction === 'asc' ? compareResult : -compareResult;
+    });
 }
 
 // Toggle camera button handler
@@ -521,7 +769,7 @@ $('#export-csv-btn').on('click', function() {
     let csvContent = "Student ID,Name,Timestamp,Status\n";
     
     attendanceLog.forEach(record => {
-        csvContent += `${record.student_id},${record.name},${record.timestamp},${record.status}\n`;
+        csvContent += `${record.student_id || record.user_id},"${record.name}",${record.timestamp || formatTime(record.raw_timestamp)},Present\n`;
     });
     
     // Create download link
@@ -536,13 +784,51 @@ $('#export-csv-btn').on('click', function() {
     document.body.removeChild(link);
 });
 
+// Clean up on page unload
+$(window).on('beforeunload', function() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    
+    if (html5QrCode && scanning) {
+        html5QrCode.stop().catch(err => console.error("Error stopping scanner:", err));
+    }
+});
+
 // Make scanner responsive when window resizes
 $(window).on('resize', function() {
     if (scanning) {
         stopScanner();
-        startScanner();
+        // Add small delay to ensure DOM is fully updated
+        setTimeout(() => {
+            startScanner();
+        }, 200);
     }
 });
+
+// Add event listener for sidebar toggle
+$("#sidebarToggle, #sidebarToggleTop").on('click', function() {
+    if (scanning) {
+        // Add delay to let the sidebar animation complete
+        setTimeout(() => {
+            updateScannerDimensions();
+        }, 300);
+    }
+});
+
+// Function to update scanner dimensions without restarting
+function updateScannerDimensions() {
+    if (html5QrCode && scanning) {
+        const scannerWidth = $('#scanner-container').width();
+        const qrboxSize = Math.min(scannerWidth * 0.7, 250);
+        
+        // Gracefully stop and restart with new dimensions
+        stopScanner();
+        setTimeout(() => {
+            startScanner();
+        }, 100);
+    }
+}
 </script>
 
 </body>

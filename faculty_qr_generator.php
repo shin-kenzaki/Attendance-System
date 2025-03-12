@@ -54,6 +54,23 @@ if ($schedule_result->num_rows > 0) {
     $current_schedule = $schedule_result->fetch_assoc();
 }
 
+// Get today's attendance records for this subject
+$today_start = date('Y-m-d 00:00:00');
+$today_end = date('Y-m-d 23:59:59');
+
+// Fixed query - removed u.student_id and using u.id as identifier instead
+$attendance_query = "SELECT a.*, u.id as user_id, CONCAT(u.firstname, ' ', COALESCE(u.middle_init, ''), ' ', u.lastname) as student_name,
+                     TIME_FORMAT(a.time_in, '%h:%i %p') as formatted_time
+                     FROM attendances a 
+                     JOIN users u ON a.user_id = u.id
+                     WHERE a.subject_id = ? AND a.time_in BETWEEN ? AND ?
+                     ORDER BY a.time_in DESC";
+$attendance_stmt = $conn->prepare($attendance_query);
+$attendance_stmt->bind_param("iss", $subject_id, $today_start, $today_end);
+$attendance_stmt->execute();
+$attendance_result = $attendance_stmt->get_result();
+$attendance_count = $attendance_result->num_rows;
+
 // Include common header
 include 'includes/header.php';
 ?>
@@ -136,35 +153,58 @@ include 'includes/header.php';
         <div class="col-lg-6 col-md-12 mb-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Real-time Attendance</h6>
-                    <div>
-                        <span id="attendance-count" class="badge badge-primary mr-2">0</span>
-                        <button id="export-csv-btn" class="btn btn-sm btn-outline-secondary" disabled>
+                    <h6 class="m-0 font-weight-bold text-primary">Today's Attendance</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="d-flex align-items-center mr-3">
+                            <span id="attendance-count" class="badge badge-primary mr-2"><?php echo $attendance_count; ?></span>
+                            <div id="refresh-indicator" class="spinner-border spinner-border-sm text-primary d-none" role="status">
+                                <span class="sr-only">Loading...</span>
+                            </div>
+                        </div>
+                        <button id="export-csv-btn" class="btn btn-sm btn-outline-secondary" <?php echo $attendance_count > 0 ? '' : 'disabled'; ?>>
                             <i class="fas fa-download mr-1"></i> Export CSV
                         </button>
                     </div>
                 </div>
                 <div class="card-body">
+                    <div class="text-center mb-2 text-muted small">
+                        <span>Last updated: <span id="last-updated-time"><?php echo date('h:i:s A'); ?></span></span>
+                        <button id="refresh-now-btn" class="btn btn-link btn-sm text-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh Now
+                        </button>
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-bordered" id="attendance-table" width="100%" cellspacing="0">
                             <thead>
                                 <tr>
-                                    <th>Student ID</th>
-                                    <th>Name</th>
-                                    <th>Timestamp</th>
+                                    <th class="sorting" data-sort="student_id">Student ID <i class="fas fa-sort ml-1"></i></th>
+                                    <th class="sorting" data-sort="name">Name <i class="fas fa-sort ml-1"></i></th>
+                                    <th class="sorting" data-sort="time_in">Time <i class="fas fa-sort ml-1"></i></th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="attendance-log">
-                                <tr id="empty-log-row">
-                                    <td colspan="4" class="text-center">No attendance records yet.</td>
-                                </tr>
+                                <?php if ($attendance_count > 0): ?>
+                                    <?php while ($attendance = $attendance_result->fetch_assoc()): ?>
+                                    <tr data-user-id="<?php echo $attendance['user_id']; ?>">
+                                        <td><?php echo htmlspecialchars($attendance['user_id']); ?></td>
+                                        <td><?php echo htmlspecialchars($attendance['student_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($attendance['formatted_time']); ?></td>
+                                        <td><span class="badge badge-success">Present</span></td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                <?php else: ?>
+                                    <tr id="empty-log-row">
+                                        <td colspan="4" class="text-center">No attendance records yet today.</td>
+                                    </tr>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
         </div>
+
     </div>
 
 </div>
@@ -182,16 +222,130 @@ include 'includes/header.php';
 let autoRefreshInterval;
 let qrActive = true;
 let attendanceLog = [];
+let currentSort = { column: 'time_in', direction: 'desc' }; // Added sorting tracking variable
 const subject_id = <?php echo $subject_id; ?>;
 const schedule_id = <?php echo $current_schedule ? $current_schedule['id'] : 'null'; ?>;
 const faculty_id = <?php echo $_SESSION['user_id']; ?>;
+
+// Initialize existing attendance data
+<?php if ($attendance_count > 0): ?>
+    attendanceLog = [
+        <?php 
+        // Reset the result pointer
+        $attendance_result->data_seek(0);
+        while ($attendance = $attendance_result->fetch_assoc()): 
+        ?>
+        {
+            user_id: <?php echo $attendance['user_id']; ?>,
+            student_id: "<?php echo addslashes($attendance['user_id']); ?>", // Using user_id as student_id
+            name: "<?php echo addslashes($attendance['student_name']); ?>",
+            timestamp: "<?php echo $attendance['formatted_time']; ?>",
+            raw_timestamp: "<?php echo $attendance['time_in']; ?>"
+        },
+        <?php endwhile; ?>
+    ];
+<?php endif; ?>
 
 // Initialize on page load
 $(document).ready(function() {
     generateQRCode();
     startAutoRefresh();
     checkAttendance();
+    setupSorting(); // Added sorting setup
 });
+
+// Set up table sorting
+function setupSorting() {
+    $('.sorting').on('click', function() {
+        const column = $(this).data('sort');
+        
+        // Toggle direction if same column is clicked
+        if (currentSort.column === column) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort.column = column;
+            currentSort.direction = 'asc';
+        }
+        
+        // Update sort indicators
+        $('.sorting').find('i').attr('class', 'fas fa-sort ml-1');
+        $(this).find('i').attr('class', 'fas fa-sort-' + 
+            (currentSort.direction === 'asc' ? 'up' : 'down') + ' ml-1');
+            
+        // Sort and update the table
+        sortAttendanceData();
+        updateAttendanceTable(attendanceLog);
+    });
+}
+
+// Sort attendance data based on current sort settings
+function sortAttendanceData() {
+    if (!attendanceLog || attendanceLog.length === 0) return;
+    
+    attendanceLog.sort((a, b) => {
+        let valA, valB;
+        
+        switch (currentSort.column) {
+            case 'student_id':
+                valA = a.student_id || a.user_id;
+                valB = b.student_id || b.user_id;
+                break;
+            case 'name':
+                valA = a.name;
+                valB = b.name;
+                break;
+            case 'time_in':
+                valA = a.raw_timestamp || a.timestamp;
+                valB = b.raw_timestamp || b.timestamp;
+                break;
+            default:
+                return 0;
+        }
+        
+        // Direction check
+        const compareResult = valA > valB ? 1 : (valA < valB ? -1 : 0);
+        return currentSort.direction === 'asc' ? compareResult : -compareResult;
+    });
+}
+
+// Format time for display
+function formatTime(timeString) {
+    if (!timeString) return '';
+    return new Date(timeString).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
+// Update the attendance table with new data
+function updateAttendanceTable(data) {
+    if (!data || !Array.isArray(data)) return;
+    
+    // Clear table
+    $('#attendance-log').empty();
+    
+    // Update count
+    $('#attendance-count').text(data.length);
+    
+    // Enable/disable export button
+    $('#export-csv-btn').prop('disabled', data.length === 0);
+    
+    // If no records
+    if (data.length === 0) {
+        $('#attendance-log').html('<tr id="empty-log-row"><td colspan="4" class="text-center">No attendance records yet today.</td></tr>');
+        return;
+    }
+    
+    // Populate table
+    data.forEach(record => {
+        const newRow = `
+            <tr data-user-id="${record.user_id}">
+                <td>${record.student_id || record.user_id}</td>
+                <td>${record.name}</td>
+                <td>${record.timestamp || formatTime(record.raw_timestamp)}</td>
+                <td><span class="badge badge-success">Present</span></td>
+            </tr>
+        `;
+        $('#attendance-log').append(newRow);
+    });
+}
 
 // Generate the QR code with relevant data
 function generateQRCode() {
@@ -316,7 +470,8 @@ function checkAttendance() {
             type: 'GET',
             data: {
                 subject_id: subject_id,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                today_only: true // Add parameter to fetch only today's records
             },
             dataType: 'json',
             success: function(response) {
@@ -345,34 +500,45 @@ function updateAttendanceLog(newRecords) {
     // Add new records to our tracking array
     attendanceLog = [...attendanceLog, ...newItems];
     
-    // Remove empty log message if present
-    $('#empty-log-row').remove();
+    // Sort the data according to current sort preference
+    sortAttendanceData();
     
-    // Add rows to table
-    newItems.forEach(record => {
-        const newRow = `
-            <tr>
-                <td>${record.student_id || 'N/A'}</td>
-                <td>${record.name}</td>
-                <td>${new Date(record.timestamp).toLocaleTimeString()}</td>
-                <td><span class="badge badge-success">Present</span></td>
-            </tr>
-        `;
-        $('#attendance-log').prepend(newRow);
-    });
+    // Update the table with all data
+    updateAttendanceTable(attendanceLog);
     
-    // Update count
-    $('#attendance-count').text(attendanceLog.length);
-    
-    // Enable export button if we have records
-    if (attendanceLog.length > 0) {
-        $('#export-csv-btn').prop('disabled', false);
-    }
+    // Update last updated time
+    $('#last-updated-time').text(new Date().toLocaleTimeString());
     
     // Play a notification sound for new attendance
     const audio = new Audio('assets/sounds/attendance-alert.mp3');
-    audio.play();
+    audio.play().catch(err => console.log('Error playing sound:', err));
 }
+
+// Refresh attendance data manually
+$('#refresh-now-btn').on('click', function() {
+    $.ajax({
+        url: 'get_attendance_data.php',
+        type: 'GET',
+        data: {
+            subject_id: subject_id,
+            timestamp: new Date().toISOString(),
+            today_only: true
+        },
+        dataType: 'json',
+        success: function(response) {
+            if (response.status === 'success') {
+                // Instead of just updating with new records, replace the entire table
+                attendanceLog = response.data;
+                sortAttendanceData();
+                updateAttendanceTable(attendanceLog);
+                $('#last-updated-time').text(new Date().toLocaleTimeString());
+            }
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.error("Error refreshing attendance:", textStatus, errorThrown);
+        }
+    });
+});
 
 // Export to CSV handler
 $('#export-csv-btn').on('click', function() {
@@ -382,7 +548,7 @@ $('#export-csv-btn').on('click', function() {
     let csvContent = "Student ID,Name,Timestamp,Status\n";
     
     attendanceLog.forEach(record => {
-        csvContent += `${record.student_id || 'N/A'},${record.name},${record.timestamp},Present\n`;
+        csvContent += `${record.student_id || 'N/A'},${record.name},${record.timestamp || record.raw_timestamp},Present\n`;
     });
     
     // Create download link

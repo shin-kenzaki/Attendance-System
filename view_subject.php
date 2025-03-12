@@ -701,7 +701,16 @@ function initializeScanner() {
     Html5Qrcode.getCameras().then(devices => {
         if (devices && devices.length) {
             cameraList = devices;
-            cameraId = devices[0].id;
+            // Select back camera by default (usually the second camera in the list)
+            if (devices.length > 1) {
+                // If multiple cameras, select the second one (usually back camera)
+                cameraId = devices[1].id;
+                isFrontCamera = false;
+            } else {
+                // If only one camera, use that
+                cameraId = devices[0].id;
+                isFrontCamera = true;
+            }
             startScanner();
         } else {
             $('#scanner-status').html('<p class="text-danger">No cameras found!</p>');
@@ -719,15 +728,12 @@ function startScanner() {
     $('#scanner-status').html('<p class="text-primary">Starting camera...</p>');
     scanning = true;
     
-    // Improved camera configuration with front camera preference
+    // Improved camera configuration for better scanning
     const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
-        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
-        videoConstraints: {
-            facingMode: "user"
-        }
+        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
     };
     
     // Start scanning

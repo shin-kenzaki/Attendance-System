@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // Get POST data
 $user_id = isset($_POST['user_id']) ? intval($_POST['user_id']) : 0;
 $subject_id = isset($_POST['subject_id']) ? intval($_POST['subject_id']) : 0;
-$schedule_id = isset($_POST['schedule_id']) ? intval($_POST['schedule_id']) : null;
+$schedule_id = isset($_POST['schedule_id']) && $_POST['schedule_id'] !== "null" ? intval($_POST['schedule_id']) : null;
 $timestamp = isset($_POST['timestamp']) ? $_POST['timestamp'] : date('Y-m-d H:i:s');
 
 // Validate data
@@ -58,11 +58,20 @@ if ($existing_result->num_rows > 0) {
     exit();
 }
 
-// Record the attendance
-$time_in = date('Y-m-d H:i:s', strtotime($timestamp)); // Convert to MySQL timestamp format
-$insert_query = "INSERT INTO attendances (user_id, subject_id, time_in) VALUES (?, ?, ?)";
-$insert_stmt = $conn->prepare($insert_query);
-$insert_stmt->bind_param("iis", $user_id, $subject_id, $time_in); // Note 's' for string timestamp
+// Format the timestamp properly for MySQL
+date_default_timezone_set('Asia/Manila'); // Set timezone to Philippine time
+$time_in = date('Y-m-d H:i:s', strtotime($timestamp));
+
+// Record the attendance with schedule_id if available
+if ($schedule_id) {
+    $insert_query = "INSERT INTO attendances (user_id, subject_id, schedule_id, time_in) VALUES (?, ?, ?, ?)";
+    $insert_stmt = $conn->prepare($insert_query);
+    $insert_stmt->bind_param("iiis", $user_id, $subject_id, $schedule_id, $time_in);
+} else {
+    $insert_query = "INSERT INTO attendances (user_id, subject_id, time_in) VALUES (?, ?, ?)";
+    $insert_stmt = $conn->prepare($insert_query);
+    $insert_stmt->bind_param("iis", $user_id, $subject_id, $time_in);
+}
 
 if ($insert_stmt->execute()) {
     // Log this action
