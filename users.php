@@ -36,6 +36,40 @@ if ($result->num_rows > 0) {
         }
     }
 }
+
+// Get user statistics
+$stats = [
+    'total_users' => 0,
+    'total_faculty' => 0,
+    'total_students' => 0,
+    'active_users' => 0,
+    'inactive_users' => 0,
+    'departments' => []
+];
+
+$statsQuery = "SELECT 
+    COUNT(*) as total,
+    SUM(CASE WHEN usertype = 'faculty' THEN 1 ELSE 0 END) as faculty_count,
+    SUM(CASE WHEN usertype = 'student' THEN 1 ELSE 0 END) as student_count,
+    SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
+    SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as inactive_count,
+    department
+    FROM users 
+    GROUP BY department"; // Removed the WHERE clause to include admins
+$statsResult = $conn->query($statsQuery);
+
+while($row = $statsResult->fetch_assoc()) {
+    $stats['departments'][$row['department']] = [
+        'total' => $row['total'],
+        'faculty' => $row['faculty_count'],
+        'students' => $row['student_count']
+    ];
+    $stats['total_users'] += $row['total'];
+    $stats['total_faculty'] += $row['faculty_count'];
+    $stats['total_students'] += $row['student_count'];
+    $stats['active_users'] += $row['active_count'];
+    $stats['inactive_users'] += $row['inactive_count'];
+}
 ?>
 
 <!DOCTYPE html>
@@ -45,13 +79,188 @@ if ($result->num_rows > 0) {
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+        .table td, .table th {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .table td.actions-cell {
+            overflow: visible; /* Allow dropdowns to be visible */
+            white-space: nowrap;
+            max-width: none;
+        }
+        
+        .truncate {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Uniform filter input sizes */
+        .uniform-filter-size {
+            width: 100%;
+        }
+    </style>
 
 <!-- Begin Page Content -->
 <div class="container-fluid">
 
-    <!-- Page Heading -->
-    <h1 class="h3 mb-2 text-gray-800">Users</h1>
-    <p class="mb-4">Manage faculty and student users in separate tabs.</p>
+    <!-- Page Heading with batch actions -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-2 text-gray-800">Users</h1>
+            <p class="mb-4">
+                Manage all system users including faculty members, students, and administrators.
+            </p>
+        </div>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-cog fa-sm"></i> Batch Actions
+            </button>
+            <div class="dropdown-menu dropdown-menu-right">
+                <a class="dropdown-item" href="#" onclick="batchAction('activate')">
+                    <i class="fas fa-check-circle fa-sm fa-fw mr-2 text-gray-400"></i>Activate Selected
+                </a>
+                <a class="dropdown-item" href="#" onclick="batchAction('deactivate')">
+                    <i class="fas fa-times-circle fa-sm fa-fw mr-2 text-gray-400"></i>Deactivate Selected
+                </a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item text-danger" href="#" onclick="batchAction('delete')">
+                    <i class="fas fa-trash fa-sm fa-fw mr-2"></i>Delete Selected
+                </a>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Statistics Cards -->
+    <div class="row">
+        <!-- Total Users Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Users</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $stats['total_users'] ?></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Faculty Count Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Faculty Members</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $stats['total_faculty'] ?></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chalkboard-teacher fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Students Count Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Students</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $stats['total_students'] ?></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-user-graduate fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active/Inactive Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Active Users</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                <?= $stats['active_users'] ?> / <?= $stats['total_users'] ?>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-user-check fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add the filters section -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">Filter Users</h6>
+            <button class="btn btn-sm btn-link" type="button" data-toggle="collapse" data-target="#filtersCollapse" aria-expanded="true" aria-controls="filtersCollapse">
+                <i class="fas fa-chevron-down"></i>
+            </button>
+        </div>
+        <div class="collapse show" id="filtersCollapse">
+            <div class="card-body">
+                <form id="filterForm" class="form-inline">
+                    <div class="row w-100">
+                        <div class="col-md-6 mb-3">
+                            <label for="departmentFilter" class="d-block text-left">
+                                <i class="fas fa-building mr-1"></i> Department
+                            </label>
+                            <select class="form-control uniform-filter-size w-100" id="departmentFilter">
+                                <option value="">All Departments</option>
+                                <?php foreach(array_keys($stats['departments']) as $dept): ?>
+                                    <option value="<?= $dept ?>"><?= $dept ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="statusFilter" class="d-block text-left">
+                                <i class="fas fa-toggle-on mr-1"></i> Status
+                            </label>
+                            <select class="form-control uniform-filter-size w-100" id="statusFilter">
+                                <option value="">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Buttons Row -->
+                    <div class="row w-100 mt-2">
+                        <div class="col-md-12 text-right">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="fas fa-filter mr-1"></i> Apply Filters
+                            </button>
+                            <a href="users.php" class="btn btn-secondary btn-sm ml-2">
+                                <i class="fas fa-undo mr-1"></i> Reset Filters
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <!-- Success/Error Messages -->
     <?php if(isset($_SESSION['success_message'])): ?>
@@ -127,108 +336,108 @@ if ($result->num_rows > 0) {
                 <!-- Faculty Tab -->
                 <div class="tab-pane fade show active" id="faculty" role="tabpanel" aria-labelledby="faculty-tab">
                     <div class="table-responsive">
-                        <div class="px-3">
-                            <table class="table table-bordered table-hover" id="facultyTable" width="100%" cellspacing="0">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Name</th>
-                                        <th>Email</th>
-                                        <th>Department</th>
-                                        <th>Status</th>
-                                        <th>Last Login</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    if (!empty($faculty)) {
-                                        foreach($faculty as $row) {
-                                            $status_class = ($row["status"] == 'active') ? 'text-success' : 'text-danger';
-                                            $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
-                                            $status_text = ucfirst($row["status"]); 
-                                            echo "<tr>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["id"]) . "</td>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</td>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["email"]) . "</td>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["department"]) . "</td>";
-                                            echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
-                                            echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
-                                            echo "<td class='text-center' style='white-space: nowrap;'>
-                                                    <div class='dropdown no-arrow'>
-                                                        <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
-                                                            Actions
-                                                        </a>
-                                                        <div class='dropdown-menu dropdown-menu-right shadow animated--fade-in' aria-labelledby='dropdownMenuLink'>
-                                                            <a class='dropdown-item' href='#' onclick='editUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
-                                                            <a class='dropdown-item' href='#' onclick='generateNewPassword(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
-                                                            <a class='dropdown-item' href='#' onclick='deleteUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
-                                                        </div>
+                        <table class="table table-bordered" id="facultyTable" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th width="30px"><input type="checkbox" id="selectAllFaculty"></th>
+                                    <th width="100px">ID</th>
+                                    <th width="200px">Name</th>
+                                    <th width="200px">Email</th>
+                                    <th width="150px">Department</th>
+                                    <th width="100px">Status</th>
+                                    <th width="150px">Last Login</th>
+                                    <th width="100px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                if (!empty($faculty)) {
+                                    foreach($faculty as $row) {
+                                        $status_class = ($row["status"] == 'active') ? 'text-success' : 'text-danger';
+                                        $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
+                                        $status_text = ucfirst($row["status"]); 
+                                        echo "<tr>";
+                                        echo "<td class='text-center'><input type='checkbox' name='user_checkbox' value='" . htmlspecialchars($row["id"]) . "'></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["id"]) . "'>" . htmlspecialchars($row["id"]) . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["email"]) . "'>" . htmlspecialchars($row["email"]) . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["department"]) . "'>" . htmlspecialchars($row["department"]) . "</span></td>";
+                                        echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
+                                        echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
+                                        echo "<td class='actions-cell text-center' style='white-space: nowrap;'>
+                                                <div class='dropdown no-arrow'>
+                                                    <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
+                                                        Actions
+                                                    </a>
+                                                    <div class='dropdown-menu dropdown-menu-right shadow animated--fade-in' aria-labelledby='dropdownMenuLink'>
+                                                        <a class='dropdown-item' href='#' onclick='editUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
+                                                        <a class='dropdown-item' href='#' onclick='generateNewPassword(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
+                                                        <a class='dropdown-item' href='#' onclick='deleteUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
                                                     </div>
-                                                </td>";
-                                            echo "</tr>";
-                                        }
-                                    } else {
-                                        echo "<tr><td colspan='7' class='text-center'>No faculty users found</td></tr>";
+                                                </div>
+                                            </td>";
+                                        echo "</tr>";
                                     }
-                                    ?>
-                                </tbody>
-                            </table>
-                        </div>
+                                } else {
+                                    echo "<tr><td colspan='8' class='text-center'>No faculty users found</td></tr>";
+                                }
+                                ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
                 
                 <!-- Students Tab -->
                 <div class="tab-pane fade" id="students" role="tabpanel" aria-labelledby="students-tab">
                     <div class="table-responsive">
-                        <div class="px-3">
-                            <table class="table table-bordered table-hover" id="studentsTable" width="100%" cellspacing="0">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Name</th>
-                                        <th>Email</th>
-                                        <th>Department</th>
-                                        <th>Status</th>
-                                        <th>Last Login</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    if (!empty($students)) {
-                                        foreach($students as $row) {
-                                            $status_class = ($row["status"] == 'active') ? 'text-success' : 'text-danger';
-                                            $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
-                                            $status_text = ucfirst($row["status"]);
-                                            echo "<tr>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["id"]) . "</td>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</td>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["email"]) . "</td>";
-                                            echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["department"]) . "</td>";
-                                            echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
-                                            echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
-                                            echo "<td class='text-center' style='white-space: nowrap;'>
-                                                    <div class='dropdown no-arrow'>
-                                                        <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
-                                                            Actions
-                                                        </a>
-                                                        <div class='dropdown-menu dropdown-menu-right shadow animated--fade-in' aria-labelledby='dropdownMenuLink'>
-                                                            <a class='dropdown-item' href='#' onclick='editUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
-                                                            <a class='dropdown-item' href='#' onclick='generateNewPassword(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
-                                                            <a class='dropdown-item' href='#' onclick='deleteUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
-                                                        </div>
+                        <table class="table table-bordered" id="studentsTable" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th width="30px"><input type="checkbox" id="selectAllStudents"></th>
+                                    <th width="100px">ID</th>
+                                    <th width="200px">Name</th>
+                                    <th width="200px">Email</th>
+                                    <th width="150px">Department</th>
+                                    <th width="100px">Status</th>
+                                    <th width="150px">Last Login</th>
+                                    <th width="100px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                if (!empty($students)) {
+                                    foreach($students as $row) {
+                                        $status_class = ($row["status"] == 'active') ? 'text-success' : 'text-danger';
+                                        $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
+                                        $status_text = ucfirst($row["status"]);
+                                        echo "<tr>";
+                                        echo "<td class='text-center'><input type='checkbox' name='user_checkbox' value='" . htmlspecialchars($row["id"]) . "'></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["id"]) . "'>" . htmlspecialchars($row["id"]) . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["email"]) . "'>" . htmlspecialchars($row["email"]) . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["department"]) . "'>" . htmlspecialchars($row["department"]) . "</span></td>";
+                                        echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
+                                        echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
+                                        echo "<td class='actions-cell text-center' style='white-space: nowrap;'>
+                                                <div class='dropdown no-arrow'>
+                                                    <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
+                                                        Actions
+                                                    </a>
+                                                    <div class='dropdown-menu dropdown-menu-right shadow animated--fade-in' aria-labelledby='dropdownMenuLink'>
+                                                        <a class='dropdown-item' href='#' onclick='editUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-edit fa-sm fa-fw mr-2 text-gray-400'></i>Edit</a>
+                                                        <a class='dropdown-item' href='#' onclick='generateNewPassword(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-key fa-sm fa-fw mr-2 text-gray-400'></i>Generate New Password</a>
+                                                        <a class='dropdown-item' href='#' onclick='deleteUser(" . htmlspecialchars($row["id"]) . ")'><i class='fas fa-trash fa-sm fa-fw mr-2 text-gray-400'></i>Delete</a>
                                                     </div>
-                                                </td>";
-                                            echo "</tr>";
-                                        }
-                                    } else {
-                                        echo "<tr><td colspan='7' class='text-center'>No student users found</td></tr>";
+                                                </div>
+                                            </td>";
+                                        echo "</tr>";
                                     }
-                                    ?>
-                                </tbody>
-                            </table>
-                        </div>
+                                } else {
+                                    echo "<tr><td colspan='8' class='text-center'>No student users found</td></tr>";
+                                }
+                                ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
                 
@@ -240,6 +449,7 @@ if ($result->num_rows > 0) {
                             <table class="table table-bordered table-hover" id="othersTable" width="100%" cellspacing="0">
                                 <thead>
                                     <tr>
+                                        <th><input type="checkbox" id="selectAllOthers"></th>
                                         <th>ID</th>
                                         <th>Name</th>
                                         <th>Email</th>
@@ -257,14 +467,15 @@ if ($result->num_rows > 0) {
                                         $status_icon = ($row["status"] == 'active') ? 'fa-check-circle' : 'fa-times-circle';
                                         $status_text = ucfirst($row["status"]);
                                         echo "<tr>";
-                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["id"]) . "</td>";
-                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</td>";
-                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["email"]) . "</td>";
-                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars(ucfirst($row["usertype"])) . "</td>";
-                                        echo "<td style='white-space: nowrap;'>" . htmlspecialchars($row["department"]) . "</td>";
+                                        echo "<td><input type='checkbox' name='user_checkbox' value='" . htmlspecialchars($row["id"]) . "'></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["id"]) . "'>" . htmlspecialchars($row["id"]) . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "'>" . htmlspecialchars($row["lastname"] . ", " . $row["firstname"] . " " . $row["middle_init"] . ".") . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["email"]) . "'>" . htmlspecialchars($row["email"]) . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars(ucfirst($row["usertype"])) . "'>" . htmlspecialchars(ucfirst($row["usertype"])) . "</span></td>";
+                                        echo "<td><span class='truncate' title='" . htmlspecialchars($row["department"]) . "'>" . htmlspecialchars($row["department"]) . "</span></td>";
                                         echo "<td style='white-space: nowrap;'><span class='{$status_class}'><i class='fas {$status_icon}'></i> " . $status_text . "</span></td>";
                                         echo "<td style='white-space: nowrap;'>" . ($row["last_login"] ? date('M d, Y h:i A', strtotime($row["last_login"])) : 'Never') . "</td>";
-                                        echo "<td class='text-center' style='white-space: nowrap;'>
+                                        echo "<td class='actions-cell text-center' style='white-space: nowrap;'>
                                                 <div class='dropdown no-arrow'>
                                                     <a class='dropdown-toggle btn btn-sm btn-secondary' href='#' role='button' id='dropdownMenuLink' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>
                                                         Actions
@@ -535,6 +746,46 @@ $(document).ready(function() {
             $(`#${hash}-tab`).tab('show');
         }
     }
+    
+    // Add these handlers after the existing document.ready code
+    
+    // Handle "Select All" for Faculty table
+    $('#selectAllFaculty').change(function() {
+        const isChecked = $(this).prop('checked');
+        $('#facultyTable tbody input[type="checkbox"]').prop('checked', isChecked);
+    });
+
+    // Handle "Select All" for Students table
+    $('#selectAllStudents').change(function() {
+        const isChecked = $(this).prop('checked');
+        $('#studentsTable tbody input[type="checkbox"]').prop('checked', isChecked);
+    });
+
+    // Handle "Select All" for Others table
+    $('#selectAllOthers').change(function() {
+        const isChecked = $(this).prop('checked');
+        $('#othersTable tbody input[type="checkbox"]').prop('checked', isChecked);
+    });
+
+    // Update header checkbox when individual checkboxes change
+    function updateHeaderCheckbox(tableId, headerCheckboxId) {
+        const totalCheckboxes = $(`#${tableId} tbody input[type="checkbox"]`).length;
+        const checkedCheckboxes = $(`#${tableId} tbody input[type="checkbox"]:checked`).length;
+        $(`#${headerCheckboxId}`).prop('checked', totalCheckboxes === checkedCheckboxes && totalCheckboxes > 0);
+    }
+
+    // Add change event listeners for individual checkboxes
+    $('#facultyTable tbody').on('change', 'input[type="checkbox"]', function() {
+        updateHeaderCheckbox('facultyTable', 'selectAllFaculty');
+    });
+
+    $('#studentsTable tbody').on('change', 'input[type="checkbox"]', function() {
+        updateHeaderCheckbox('studentsTable', 'selectAllStudents');
+    });
+
+    $('#othersTable tbody').on('change', 'input[type="checkbox"]', function() {
+        updateHeaderCheckbox('othersTable', 'selectAllOthers');
+    });
 });
 
 // Handle adding more users
@@ -647,6 +898,91 @@ function editUser(userId) {
             Swal.fire('Error', 'Failed to load user data.', 'error');
         }
     });
+}
+
+function batchAction(action) {
+    const selectedIds = [];
+    $('input[name="user_checkbox"]:checked').each(function() {
+        selectedIds.push($(this).val());
+    });
+
+    if (selectedIds.length === 0) {
+        Swal.fire('No Users Selected', 'Please select users to perform this action.', 'warning');
+        return;
+    }
+
+    let title, text, confirmButtonText;
+    switch(action) {
+        case 'activate':
+            title = 'Activate Selected Users?';
+            text = 'This will activate all selected users.';
+            confirmButtonText = 'Yes, activate them!';
+            break;
+        case 'deactivate':
+            title = 'Deactivate Selected Users?';
+            text = 'This will deactivate all selected users.';
+            confirmButtonText = 'Yes, deactivate them!';
+            break;
+        case 'delete':
+            title = 'Delete Selected Users?';
+            text = 'This action cannot be undone!';
+            confirmButtonText = 'Yes, delete them!';
+            break;
+    }
+
+    Swal.fire({
+        title: title,
+        text: text,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: confirmButtonText
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                url: 'batch_user_action.php',
+                type: 'POST',
+                data: {
+                    action: action,
+                    user_ids: selectedIds
+                },
+                success: function(response) {
+                    const data = JSON.parse(response);
+                    if (data.status === 'success') {
+                        Swal.fire('Success!', data.message, 'success')
+                        .then(() => location.reload());
+                    } else {
+                        Swal.fire('Error!', data.message, 'error');
+                    }
+                },
+                error: function() {
+                    Swal.fire('Error!', 'An error occurred while processing the request.', 'error');
+                }
+            });
+        }
+    });
+}
+
+function applyFilters() {
+    const department = $('#departmentFilter').val();
+    const status = $('#statusFilter').val();
+    
+    $('#facultyTable').DataTable().columns(3).search(department).draw();
+    $('#studentsTable').DataTable().columns(3).search(department).draw();
+    
+    if (status) {
+        const statusIndex = 4; // Adjust based on your table structure
+        const searchTerm = status === 'active' ? 'Active' : 'Inactive';
+        $('#facultyTable').DataTable().columns(statusIndex).search(searchTerm).draw();
+        $('#studentsTable').DataTable().columns(statusIndex).search(searchTerm).draw();
+    }
+}
+
+function resetFilters() {
+    $('#filterForm')[0].reset();
+    $('#facultyTable').DataTable().search('').columns().search('').draw();
+    $('#studentsTable').DataTable().search('').columns().search('').draw();
 }
 </script>
 

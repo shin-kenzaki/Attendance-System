@@ -1,4 +1,4 @@
-            <!-- Footer -->
+<!-- Footer -->
             <footer class="sticky-footer bg-white">
                 <div class="container my-auto">
                     <div class="copyright text-center my-auto">
@@ -48,3 +48,31 @@
 
     <!-- Custom scripts for all pages-->
     <script src="js/sb-admin-2.min.js"></script>
+
+    <!-- Add sidebar state persistence script -->
+    <script>
+        // Execute immediately before DOM is fully loaded to prevent flicker
+        (function() {
+            var sidebarState = localStorage.getItem('sidebarToggled');
+            
+            if (sidebarState === 'true') {
+                document.body.classList.add('sidebar-toggled');
+                var sidebar = document.querySelector('.sidebar');
+                if (sidebar) sidebar.classList.add('toggled');
+            }
+        })();
+
+        // Additional initialization after DOM is ready
+        $(document).ready(function() {
+            // Listen for sidebar toggle click
+            $("#sidebarToggle, #sidebarToggleTop").on('click', function() {
+                // Get current state after the default toggle action
+                setTimeout(function() {
+                    var isToggled = $('.sidebar').hasClass('toggled');
+                    localStorage.setItem('sidebarToggled', isToggled);
+                }, 50);
+            });
+        });
+    </script>
+</body>
+</html>

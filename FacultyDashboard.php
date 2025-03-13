@@ -14,273 +14,306 @@ if ($_SESSION['usertype'] !== 'faculty') {
 // Include database connection if needed
 include 'db.php';
 
+// Get faculty ID from session
+$faculty_id = $_SESSION['user_id'];
+
+// Get total subjects taught by faculty
+$subjectQuery = "SELECT COUNT(*) as total FROM subjects WHERE faculty_id = ?";
+$stmt = $conn->prepare($subjectQuery);
+$stmt->bind_param("i", $faculty_id);
+$stmt->execute();
+$totalSubjects = $stmt->get_result()->fetch_assoc()['total'];
+
+// Get total students across all subjects
+$studentsQuery = "SELECT COUNT(DISTINCT us.user_id) as total 
+                 FROM usersubjects us 
+                 JOIN subjects s ON us.subject_id = s.id 
+                 WHERE s.faculty_id = ?";
+$stmt = $conn->prepare($studentsQuery);
+$stmt->bind_param("i", $faculty_id);
+$stmt->execute();
+$totalStudents = $stmt->get_result()->fetch_assoc()['total'];
+
+// Get today's attendance count
+$today = date('Y-m-d');
+$attendanceQuery = "SELECT COUNT(*) as total 
+                   FROM attendances a 
+                   JOIN subjects s ON a.subject_id = s.id 
+                   WHERE s.faculty_id = ? AND DATE(a.time_in) = ?";
+$stmt = $conn->prepare($attendanceQuery);
+$stmt->bind_param("is", $faculty_id, $today);
+$stmt->execute();
+$todayAttendance = $stmt->get_result()->fetch_assoc()['total'];
+
+// Get today's schedule
+$dayOfWeek = date('l');
+$scheduleQuery = "SELECT s.*, sub.code, sub.name 
+                 FROM schedules s 
+                 JOIN subjects sub ON s.subject_id = sub.id 
+                 WHERE sub.faculty_id = ? AND s.day = ? 
+                 ORDER BY s.start_time";
+$stmt = $conn->prepare($scheduleQuery);
+$stmt->bind_param("is", $faculty_id, $dayOfWeek);
+$stmt->execute();
+$todaySchedule = $stmt->get_result();
+
+// Get recent attendance records
+$recentQuery = "SELECT a.*, u.firstname, u.lastname, s.code as subject_code 
+                FROM attendances a 
+                JOIN users u ON a.user_id = u.id 
+                JOIN subjects s ON a.subject_id = s.id 
+                WHERE s.faculty_id = ? 
+                ORDER BY a.time_in DESC LIMIT 10";
+$stmt = $conn->prepare($recentQuery);
+$stmt->bind_param("i", $faculty_id);
+$stmt->execute();
+$recentAttendance = $stmt->get_result();
+
 // Include common header (which handles the HTML head, navigation sidebar, and topbar)
 include 'includes/header.php';
 ?>
 
-                <!-- Begin Page Content -->
-                <div class="container-fluid">
+<!-- Begin Page Content -->
+<div class="container-fluid">
 
-                    <!-- Page Heading -->
-                    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-                        <h1 class="h3 mb-0 text-gray-800">Faculty Dashboard</h1>
-                        <a href="#" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm"><i
-                                class="fas fa-download fa-sm text-white-50"></i> Generate Attendance Report</a>
-                    </div>
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Faculty Dashboard</h1>
+        <div>
+            <a href="take_attendance.php" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm mr-2">
+                <i class="fas fa-qrcode fa-sm text-white-50"></i> Take Attendance
+            </a>
+            <a href="faculty_reports.php" class="d-none d-sm-inline-block btn btn-sm btn-success shadow-sm">
+                <i class="fas fa-download fa-sm text-white-50"></i> Generate Report
+            </a>
+        </div>
+    </div>
 
-                    <!-- Content Row -->
-                    <div class="row">
-
-                        <!-- Total Classes Card -->
-                        <div class="col-xl-3 col-md-6 mb-4">
-                            <div class="card border-left-primary shadow h-100 py-2">
-                                <div class="card-body">
-                                    <div class="row no-gutters align-items-center">
-                                        <div class="col mr-2">
-                                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                                Total Classes</div>
-                                            <div class="h5 mb-0 font-weight-bold text-gray-800">4</div>
-                                        </div>
-                                        <div class="col-auto">
-                                            <i class="fas fa-calendar fa-2x text-gray-300"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+    <!-- Content Row -->
+    <div class="row">
+        <!-- Total Subjects Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                My Subjects</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $totalSubjects; ?></div>
                         </div>
-
-                        <!-- Students Attending Card -->
-                        <div class="col-xl-3 col-md-6 mb-4">
-                            <div class="card border-left-success shadow h-100 py-2">
-                                <div class="card-body">
-                                    <div class="row no-gutters align-items-center">
-                                        <div class="col mr-2">
-                                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                                Students Attending Today</div>
-                                            <div class="h5 mb-0 font-weight-bold text-gray-800">24</div>
-                                        </div>
-                                        <div class="col-auto">
-                                            <i class="fas fa-users fa-2x text-gray-300"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Pending Tasks Card -->
-                        <div class="col-xl-3 col-md-6 mb-4">
-                            <div class="card border-left-info shadow h-100 py-2">
-                                <div class="card-body">
-                                    <div class="row no-gutters align-items-center">
-                                        <div class="col mr-2">
-                                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                                Pending Tasks</div>
-                                            <div class="h5 mb-0 font-weight-bold text-gray-800">2</div>
-                                        </div>
-                                        <div class="col-auto">
-                                            <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Announcements Card -->
-                        <div class="col-xl-3 col-md-6 mb-4">
-                            <div class="card border-left-warning shadow h-100 py-2">
-                                <div class="card-body">
-                                    <div class="row no-gutters align-items-center">
-                                        <div class="col mr-2">
-                                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                                New Announcements</div>
-                                            <div class="h5 mb-0 font-weight-bold text-gray-800">3</div>
-                                        </div>
-                                        <div class="col-auto">
-                                            <i class="fas fa-bullhorn fa-2x text-gray-300"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Content Row -->
-                    <div class="row">
-                        <!-- Class Attendance Overview -->
-                        <div class="col-xl-8 col-lg-7">
-                            <div class="card shadow mb-4">
-                                <!-- Card Header - Dropdown -->
-                                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                                    <h6 class="m-0 font-weight-bold text-primary">Class Attendance Overview</h6>
-                                    <div class="dropdown no-arrow">
-                                        <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink"
-                                            data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                            <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
-                                        </a>
-                                        <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in"
-                                            aria-labelledby="dropdownMenuLink">
-                                            <div class="dropdown-header">View Options:</div>
-                                            <a class="dropdown-item" href="#">This Week</a>
-                                            <a class="dropdown-item" href="#">This Month</a>
-                                            <a class="dropdown-item" href="#">This Semester</a>
-                                        </div>
-                                    </div>
-                                </div>
-                                <!-- Card Body -->
-                                <div class="card-body">
-                                    <div class="chart-area">
-                                        <canvas id="myAttendanceChart"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Subject Distribution -->
-                        <div class="col-xl-4 col-lg-5">
-                            <div class="card shadow mb-4">
-                                <!-- Card Header - Dropdown -->
-                                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                                    <h6 class="m-0 font-weight-bold text-primary">Subject Distribution</h6>
-                                </div>
-                                <!-- Card Body -->
-                                <div class="card-body">
-                                    <div class="chart-pie pt-4 pb-2">
-                                        <canvas id="mySubjectChart"></canvas>
-                                    </div>
-                                    <div class="mt-4 text-center small">
-                                        <span class="mr-2">
-                                            <i class="fas fa-circle text-primary"></i> Math
-                                        </span>
-                                        <span class="mr-2">
-                                            <i class="fas fa-circle text-success"></i> Science
-                                        </span>
-                                        <span class="mr-2">
-                                            <i class="fas fa-circle text-info"></i> English
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Content Row -->
-                    <div class="row">
-                        <!-- Today's Classes -->
-                        <div class="col-lg-6 mb-4">
-                            <div class="card shadow mb-4">
-                                <div class="card-header py-3">
-                                    <h6 class="m-0 font-weight-bold text-primary">Today's Classes</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered" width="100%" cellspacing="0">
-                                            <thead>
-                                                <tr>
-                                                    <th>Time</th>
-                                                    <th>Subject</th>
-                                                    <th>Room</th>
-                                                    <th>Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td>08:00 - 09:30</td>
-                                                    <td>Mathematics 101</td>
-                                                    <td>Room 301</td>
-                                                    <td><a href="#" class="btn btn-primary btn-sm">Take Attendance</a></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>10:00 - 11:30</td>
-                                                    <td>Advanced Calculus</td>
-                                                    <td>Room 205</td>
-                                                    <td><a href="#" class="btn btn-primary btn-sm">Take Attendance</a></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>13:00 - 14:30</td>
-                                                    <td>Statistics</td>
-                                                    <td>Lab 102</td>
-                                                    <td><a href="#" class="btn btn-primary btn-sm">Take Attendance</a></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>15:00 - 16:30</td>
-                                                    <td>Discrete Mathematics</td>
-                                                    <td>Room 401</td>
-                                                    <td><a href="#" class="btn btn-primary btn-sm">Take Attendance</a></td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-6 mb-4">
-                            <!-- Recent Attendance Issues -->
-                            <div class="card shadow mb-4">
-                                <div class="card-header py-3">
-                                    <h6 class="m-0 font-weight-bold text-primary">Attendance Concerns</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered" width="100%" cellspacing="0">
-                                            <thead>
-                                                <tr>
-                                                    <th>Student</th>
-                                                    <th>Subject</th>
-                                                    <th>Attendance Rate</th>
-                                                    <th>Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td>John Doe</td>
-                                                    <td>Mathematics 101</td>
-                                                    <td><span class="text-danger">65%</span></td>
-                                                    <td><a href="#" class="btn btn-warning btn-sm">Contact</a></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Jane Smith</td>
-                                                    <td>Advanced Calculus</td>
-                                                    <td><span class="text-danger">70%</span></td>
-                                                    <td><a href="#" class="btn btn-warning btn-sm">Contact</a></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Michael Johnson</td>
-                                                    <td>Statistics</td>
-                                                    <td><span class="text-warning">75%</span></td>
-                                                    <td><a href="#" class="btn btn-warning btn-sm">Contact</a></td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Announcements -->
-                            <div class="card shadow mb-4">
-                                <div class="card-header py-3">
-                                    <h6 class="m-0 font-weight-bold text-primary">Announcements</h6>
-                                </div>
-                                <div class="card-body">
-                                    <form>
-                                        <div class="form-group">
-                                            <textarea class="form-control" rows="3" placeholder="Create a new announcement..."></textarea>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">Post Announcement</button>
-                                    </form>
-                                    <hr>
-                                    <div class="alert alert-info">
-                                        <strong>Mar 10:</strong> Mid-term review session scheduled for Monday.
-                                    </div>
-                                    <div class="alert alert-warning">
-                                        <strong>Mar 8:</strong> Please submit attendance reports by Friday.
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="col-auto">
+                            <i class="fas fa-book fa-2x text-gray-300"></i>
                         </div>
                     </div>
                 </div>
-                <!-- /.container-fluid -->
+            </div>
+        </div>
+
+        <!-- Total Students Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Students</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $totalStudents; ?></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Attendance Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Today's Attendance</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $todayAttendance; ?></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clipboard-check fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Classes Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Today's Classes</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                <?php echo $todaySchedule->num_rows; ?>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar-day fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Row -->
+    <div class="row">
+        <!-- Today's Schedule -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Today's Schedule (<?php echo $dayOfWeek; ?>)</h6>
+                    <a href="faculty_schedules.php" class="btn btn-sm btn-primary">
+                        <i class="fas fa-calendar"></i> View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    <?php if ($todaySchedule->num_rows > 0): ?>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Subject</th>
+                                        <th>Room</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php while ($class = $todaySchedule->fetch_assoc()): 
+                                        $now = new DateTime();
+                                        $start = new DateTime($class['start_time']);
+                                        $end = new DateTime($class['end_time']);
+                                        $status = '';
+                                        
+                                        if ($now > $end) {
+                                            $status = 'completed';
+                                        } elseif ($now >= $start && $now <= $end) {
+                                            $status = 'ongoing';
+                                        } else {
+                                            $status = 'upcoming';
+                                        }
+                                    ?>
+                                        <tr>
+                                            <td><?php echo date('h:i A', strtotime($class['start_time'])) . ' - ' . 
+                                                       date('h:i A', strtotime($class['end_time'])); ?></td>
+                                            <td><?php echo htmlspecialchars($class['code'] . ': ' . $class['name']); ?></td>
+                                            <td><?php echo htmlspecialchars($class['room']); ?></td>
+                                            <td>
+                                                <?php if ($status == 'ongoing'): ?>
+                                                    <a href="take_attendance.php?subject_id=<?php echo $class['subject_id']; ?>" 
+                                                       class="btn btn-success btn-sm">Take Attendance</a>
+                                                <?php elseif ($status == 'upcoming'): ?>
+                                                    <span class="badge badge-info">Upcoming</span>
+                                                <?php else: ?>
+                                                    <span class="badge badge-secondary">Completed</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center py-4">
+                            <i class="fas fa-calendar-times fa-3x text-gray-300 mb-3"></i>
+                            <p class="mb-0">No classes scheduled for today</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Attendance -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Attendance</h6>
+                    <a href="faculty_attendances.php" class="btn btn-sm btn-primary">
+                        <i class="fas fa-list"></i> View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    <?php if ($recentAttendance->num_rows > 0): ?>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Student</th>
+                                        <th>Subject</th>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php while ($record = $recentAttendance->fetch_assoc()): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($record['firstname'] . ' ' . $record['lastname']); ?></td>
+                                            <td><?php echo htmlspecialchars($record['subject_code']); ?></td>
+                                            <td><?php echo date('h:i A', strtotime($record['time_in'])); ?></td>
+                                            <td><span class="badge badge-success">Present</span></td>
+                                        </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center py-4">
+                            <i class="fas fa-clipboard fa-3x text-gray-300 mb-3"></i>
+                            <p class="mb-0">No recent attendance records</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions Row -->
+    <div class="row">
+        <div class="col-lg-12 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <a href="take_attendance.php" class="btn btn-primary btn-block py-3">
+                                <i class="fas fa-qrcode fa-2x mb-2"></i><br>Take Attendance
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="faculty_students.php" class="btn btn-success btn-block py-3">
+                                <i class="fas fa-users fa-2x mb-2"></i><br>View Students
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="faculty_reports.php" class="btn btn-info btn-block py-3">
+                                <i class="fas fa-chart-bar fa-2x mb-2"></i><br>View Reports
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="faculty_schedules.php" class="btn btn-warning btn-block py-3">
+                                <i class="fas fa-calendar-alt fa-2x mb-2"></i><br>View Schedule
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- /.container-fluid -->
 
 <?php
 // Include the Chart.js scripts before including footer.php

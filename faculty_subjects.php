@@ -122,7 +122,7 @@ include 'includes/header.php';
                                     </a>
                                 </div>
                                 <div class="col-6">
-                                    <a href="faculty_view_subject_students.php?subject_id=<?php echo $subject['id']; ?>" class="btn btn-secondary btn-sm btn-block">
+                                    <a href="faculty_students.php?subject=<?php echo $subject['id']; ?>" class="btn btn-secondary btn-sm btn-block">
                                         <i class="fas fa-user-graduate mr-1"></i> View Students
                                     </a>
                                 </div>

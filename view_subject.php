@@ -16,8 +16,30 @@ if (!isset($_GET['id'])) {
 }
 
 $subjectId = $_GET['id'];
-$sql = "SELECT * FROM subjects WHERE id = $subjectId";
+$sql = "SELECT s.*, CONCAT(u.lastname, ', ', u.firstname) AS faculty_name 
+        FROM subjects s 
+        LEFT JOIN users u ON s.faculty_id = u.id 
+        WHERE s.id = $subjectId";
 $result = $conn->query($sql);
+
+// Get enrollment count
+$enrollmentSql = "SELECT COUNT(*) as total FROM usersubjects WHERE subject_id = $subjectId";
+$enrollmentResult = $conn->query($enrollmentSql);
+$enrollmentCount = 0;
+if ($enrollmentResult && $enrollmentResult->num_rows > 0) {
+    $enrollmentCount = $enrollmentResult->fetch_assoc()['total'];
+}
+
+// Get attendance statistics
+$attendanceSql = "SELECT 
+                    COUNT(*) as total_records,
+                    COUNT(DISTINCT user_id) as total_students,
+                    COUNT(DISTINCT DATE(time_in)) as total_days,
+                    MAX(time_in) as last_attendance
+                FROM attendances 
+                WHERE subject_id = $subjectId";
+$attendanceResult = $conn->query($attendanceSql);
+$attendanceStats = $attendanceResult->fetch_assoc();
 ?>
 
 <!-- Begin Page Content -->
@@ -25,36 +47,138 @@ $result = $conn->query($sql);
     <?php
     if ($result && $result->num_rows > 0) {
         $subject = $result->fetch_assoc();
-        // Restructure the header to include the buttons
-        echo '<div class="d-flex justify-content-between align-items-center mb-4">';
+        $statusBadge = ($subject["status"] == 1) ? 
+            '<span class="badge badge-success">Active</span>' : 
+            '<span class="badge badge-danger">Inactive</span>';
+        
+        // Subject Header with Card
+        echo '<div class="card shadow mb-4">';
+        echo '<div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">';
+        echo '<h6 class="m-0 font-weight-bold text-primary">Subject Information</h6>';
         echo '<div>';
-        echo "<h1 class='mb-1'>{$subject['name']} ({$subject['code']})</h1>";
+        echo '<button type="button" class="btn btn-info btn-sm mr-2" data-toggle="modal" data-target="#qrCodeModal">
+                <i class="fas fa-qrcode mr-1"></i> Generate QR Code
+              </button>';
+        echo '<button type="button" class="btn btn-secondary btn-sm" data-toggle="modal" data-target="#scanQrCodeModal">
+                <i class="fas fa-camera mr-1"></i> Scan QR Code
+              </button>';
         echo '</div>';
-        echo '<div>';
-        echo '<button type="button" class="btn btn-info mr-2" data-toggle="modal" data-target="#qrCodeModal">View QR Code</button>';
-        echo '<button type="button" class="btn btn-secondary" data-toggle="modal" data-target="#scanQrCodeModal">Scan QR Code</button>';
+        echo '</div>';
+        
+        // Subject content
+        echo '<div class="card-body">';
+        echo '<div class="row">';
+        
+        // Left column - Basic info
+        echo '<div class="col-md-8">';
+        echo "<h2 class='h3 mb-2 text-gray-800'>{$subject['name']} <small class='text-muted'>({$subject['code']})</small></h2>";
+        
+        echo '<div class="row mt-4">';
+        echo '<div class="col-md-6">';
+        echo '<table class="table table-borderless">';
+        echo '<tr><th width="120">Faculty:</th><td>' . ($subject['faculty_name'] ?: '<span class="text-muted">Not assigned</span>') . '</td></tr>';
+        echo '<tr><th>Status:</th><td>' . $statusBadge . '</td></tr>';
+        echo '<tr><th>Enrollment:</th><td><span class="badge badge-info">' . $enrollmentCount . ' students</span></td></tr>';
+        echo '</table>';
+        echo '</div>';
+        
+        echo '<div class="col-md-6">';
+        echo '<div class="card bg-light mb-3">';
+        echo '<div class="card-header d-flex justify-content-between align-items-center">
+                <span>Join Code</span>
+                <a href="#" onclick="changeJoinCode(' . $subject['id'] . ', \'' . $subject['code'] . '\'); return false;" 
+                   class="btn btn-sm btn-outline-secondary" title="Regenerate Join Code">
+                   <i class="fas fa-sync-alt"></i>
+                </a>
+              </div>';
+        echo '<div class="card-body text-center">';
+        echo '<h3 class="card-title font-weight-bold mb-0">' . $subject['joincode'] . '</h3>';
         echo '</div>';
         echo '</div>';
+        echo '</div>';
+        echo '</div>';
+        
+        echo '</div>';
+        
+        // Right column - Attendance statistics
+        echo '<div class="col-md-4 border-left">';
+        echo '<h5 class="mb-3">Attendance Statistics</h5>';
+        
+        echo '<div class="row no-gutters">';
+        
+        // Total attendance records
+        echo '<div class="col-6 mb-3">';
+        echo '<div class="text-center">';
+        echo '<h4 class="font-weight-bold text-primary mb-0">' . number_format($attendanceStats['total_records']) . '</h4>';
+        echo '<small>Total Records</small>';
+        echo '</div>';
+        echo '</div>';
+        
+        // Unique students
+        echo '<div class="col-6 mb-3">';
+        echo '<div class="text-center">';
+        echo '<h4 class="font-weight-bold text-info mb-0">' . number_format($attendanceStats['total_students']) . '</h4>';
+        echo '<small>Active Students</small>';
+        echo '</div>';
+        echo '</div>';
+        
+        // Attendance days
+        echo '<div class="col-6">';
+        echo '<div class="text-center">';
+        echo '<h4 class="font-weight-bold text-success mb-0">' . number_format($attendanceStats['total_days']) . '</h4>';
+        echo '<small>Class Days</small>';
+        echo '</div>';
+        echo '</div>';
+        
+        // Last attendance
+        echo '<div class="col-6">';
+        echo '<div class="text-center">';
+        if ($attendanceStats['last_attendance']) {
+            $lastAttendance = date('M d, Y', strtotime($attendanceStats['last_attendance']));
+            echo '<h4 class="font-weight-bold text-dark mb-0">' . $lastAttendance . '</h4>';
+        } else {
+            echo '<h4 class="font-weight-bold text-muted mb-0">N/A</h4>';
+        }
+        echo '<small>Last Attendance</small>';
+        echo '</div>';
+        echo '</div>';
+        
+        // Action buttons
+        echo '<div class="col-12 mt-4 text-center">';
+        echo '<a href="attendance_report.php?subject_id=' . $subjectId . '" class="btn btn-sm btn-primary">
+                <i class="fas fa-chart-bar mr-1"></i> View Full Report
+              </a>';
+        echo '</div>';
+        
+        echo '</div>';
+        echo '</div>';
+        
+        echo '</div>'; // End row
+        echo '</div>'; // End card-body
+        echo '</div>'; // End card
     } else {
-        echo "Subject not found.";
+        echo '<div class="alert alert-danger">Subject not found.</div>';
     }
     ?>
     
     <!-- Schedules Section (Using card layout) -->
-    <div class="card shadow mb-4 mt-4">
+    <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-            <h6 class="m-0 font-weight-bold text-primary">Schedules</h6>
+            <h6 class="m-0 font-weight-bold text-primary">Class Schedules</h6>
             <div class="d-flex align-items-center">
-                <div class="mr-3 px-3 py-2 border rounded bg-light">
-                    <span class="font-weight-bold">Join Code:</span> 
-                    <span class="px-2 py-1"><?= $subject['joincode'] ?></span>
-                </div>
                 <a href="#" class="btn btn-success btn-sm mr-2" data-toggle="modal" data-target="#addScheduleModal">
                     <i class="fas fa-plus mr-1"></i> Add Schedule
                 </a>
-                <a href="#" class="btn btn-primary btn-sm">
-                    <i class="fas fa-file-pdf mr-1"></i> Export as PDF
-                </a>
+                <div class="dropdown no-arrow">
+                    <a class="dropdown-toggle btn btn-sm btn-light" href="#" role="button" id="exportDropdown" data-toggle="dropdown">
+                        <i class="fas fa-download mr-1"></i> Export
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in" aria-labelledby="exportDropdown">
+                        <a class="dropdown-item" href="#"><i class="fas fa-file-csv fa-sm fa-fw mr-2 text-gray-400"></i> CSV</a>
+                        <a class="dropdown-item" href="#"><i class="fas fa-file-excel fa-sm fa-fw mr-2 text-gray-400"></i> Excel</a>
+                        <a class="dropdown-item" href="#"><i class="fas fa-file-pdf fa-sm fa-fw mr-2 text-gray-400"></i> PDF</a>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="card-body">
@@ -66,37 +190,36 @@ $result = $conn->query($sql);
                 <table class="table table-bordered table-hover" id="schedulesTable" width="100%" cellspacing="0">
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>Room</th>
-                            <th>Day</th>
-                            <th>Start Time</th>
-                            <th>End Time</th>
-                            <th>Actions</th>
+                            <th width="10%">Day</th>
+                            <th width="20%">Room</th>
+                            <th width="20%">Start Time</th>
+                            <th width="20%">End Time</th>
+                            <th width="20%">Duration</th>
+                            <th width="10%">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if ($resultSchedules && $resultSchedules->num_rows > 0): ?>
-                            <?php while ($rowSch = $resultSchedules->fetch_assoc()): ?>
+                            <?php while ($rowSch = $resultSchedules->fetch_assoc()): 
+                                // Calculate duration
+                                $start = new DateTime($rowSch['start_time']);
+                                $end = new DateTime($rowSch['end_time']);
+                                $duration = $start->diff($end);
+                                $durationStr = $duration->format('%h hrs %i mins');
+                            ?>
                             <tr>
-                                <td><?= $rowSch['id'] ?></td>
+                                <td class="font-weight-bold"><?= $rowSch['day'] ?></td>
                                 <td><?= $rowSch['room'] ?></td>
-                                <td><?= $rowSch['day'] ?></td>
-                                <td><?= $rowSch['start_time'] ?></td>
-                                <td><?= $rowSch['end_time'] ?></td>
+                                <td><?= date('g:i A', strtotime($rowSch['start_time'])) ?></td>
+                                <td><?= date('g:i A', strtotime($rowSch['end_time'])) ?></td>
+                                <td><?= $durationStr ?></td>
                                 <td class="text-center">
-                                    <div class="dropdown no-arrow">
-                                        <a class="dropdown-toggle btn btn-sm btn-secondary" href="#" role="button" id="dropdownMenuLink<?= $rowSch['id'] ?>" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                            Actions
-                                        </a>
-                                        <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in" aria-labelledby="dropdownMenuLink<?= $rowSch['id'] ?>">
-                                            <a class="dropdown-item" href="#" onclick="event.preventDefault(); editSchedule(<?= $rowSch['id'] ?>)">
-                                                <i class="fas fa-edit fa-sm fa-fw mr-2 text-gray-400"></i>Edit
-                                            </a>
-                                            <a class="dropdown-item" href="#" onclick="event.preventDefault(); deleteSchedule(<?= $rowSch['id'] ?>)">
-                                                <i class="fas fa-trash fa-sm fa-fw mr-2 text-gray-400"></i>Delete
-                                            </a>
-                                        </div>
-                                    </div>
+                                    <button class="btn btn-sm btn-secondary mr-1" onclick="editSchedule(<?= $rowSch['id'] ?>)">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteSchedule(<?= $rowSch['id'] ?>)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
                                 </td>
                             </tr>
                             <?php endwhile; ?>
@@ -108,57 +231,124 @@ $result = $conn->query($sql);
                     </tbody>
                 </table>
             </div>
+            
+            <?php if ($resultSchedules && $resultSchedules->num_rows > 0): ?>
+            <!-- Weekly schedule visualization -->
+            <div class="mt-4">
+                <h6 class="font-weight-bold">Weekly Schedule</h6>
+                <div class="table-responsive">
+                    <table class="table table-bordered bg-white">
+                        <thead>
+                            <tr>
+                                <th style="width: 12.5%">Time</th>
+                                <th style="width: 12.5%">Monday</th>
+                                <th style="width: 12.5%">Tuesday</th>
+                                <th style="width: 12.5%">Wednesday</th>
+                                <th style="width: 12.5%">Thursday</th>
+                                <th style="width: 12.5%">Friday</th>
+                                <th style="width: 12.5%">Saturday</th>
+                                <th style="width: 12.5%">Sunday</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php
+                            // Create time slots from 7 AM to 10 PM in 1-hour increments
+                            for ($hour = 7; $hour <= 22; $hour++) {
+                                $timeSlot = sprintf('%02d:00', $hour);
+                                $displayTime = date('g:i A', strtotime($timeSlot));
+                                
+                                echo "<tr>";
+                                echo "<td class='font-weight-bold'>{$displayTime}</td>";
+                                
+                                // Reset schedule result pointer
+                                $resultSchedules->data_seek(0);
+                                
+                                // Loop through days
+                                $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                                foreach ($days as $day) {
+                                    $cellContent = '';
+                                    
+                                    // Check if there's a schedule for this day and time slot
+                                    while ($schedule = $resultSchedules->fetch_assoc()) {
+                                        if ($schedule['day'] == $day) {
+                                            $startHour = (int)substr($schedule['start_time'], 0, 2);
+                                            $endHour = (int)substr($schedule['end_time'], 0, 2);
+                                            
+                                            if ($hour >= $startHour && $hour < $endHour) {
+                                                $cellContent = "<div class='p-1 bg-primary text-white rounded'>";
+                                                $cellContent .= "<small>{$schedule['room']}</small>";
+                                                $cellContent .= "</div>";
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Reset for next iteration
+                                    $resultSchedules->data_seek(0);
+                                    
+                                    echo "<td>{$cellContent}</td>";
+                                }
+                                
+                                echo "</tr>";
+                            }
+                            ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
-
-    <!-- Enrolled Users Section (Using card layout) -->
-    <div class="card shadow mb-4 mt-4">
+    
+    <!-- Recent Attendance -->
+    <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-            <h6 class="m-0 font-weight-bold text-primary">Enrolled Users</h6>
+            <h6 class="m-0 font-weight-bold text-primary">Recent Attendance</h6>
+            <a href="attendance_report.php?subject_id=<?= $subjectId ?>" class="btn btn-sm btn-primary">
+                <i class="fas fa-list mr-1"></i> View All
+            </a>
         </div>
         <div class="card-body">
             <?php
-            $sqlUsers = "SELECT u.* FROM users u 
-                         JOIN usersubjects us ON u.id = us.user_id 
-                         WHERE us.subject_id = $subjectId AND u.usertype = 'Student'";
-            $resultUsers = $conn->query($sqlUsers);
+            $recentAttendanceSql = "
+                SELECT a.id, a.time_in as timestamp, u.id as student_id, u.firstname, u.lastname, s.day, s.room
+                FROM attendances a 
+                LEFT JOIN users u ON a.user_id = u.id
+                LEFT JOIN schedules s ON a.subject_id = s.subject_id
+                WHERE a.subject_id = $subjectId
+                ORDER BY a.time_in DESC
+                LIMIT 10
+            ";
+            $recentAttendanceResult = $conn->query($recentAttendanceSql);
             ?>
+            
             <div class="table-responsive">
-                <table class="table table-bordered table-hover" id="usersTable" width="100%" cellspacing="0">
+                <table class="table table-bordered table-hover" width="100%" cellspacing="0">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Actions</th>
+                            <th>Student</th>
+                            <th>Date & Time</th>
+                            <th>Schedule</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if ($resultUsers && $resultUsers->num_rows > 0): ?>
-                            <?php while ($rowUser = $resultUsers->fetch_assoc()): ?>
+                        <?php if ($recentAttendanceResult && $recentAttendanceResult->num_rows > 0): ?>
+                            <?php while ($attendance = $recentAttendanceResult->fetch_assoc()): ?>
                             <tr>
-                                <?php $name = $rowUser['firstname'] . ' ' . $rowUser['middle_init'] . ' ' . $rowUser['lastname']; ?>
-                                <td><?= $name ?></td>
-                                <td><?= $rowUser['email'] ?></td>
-                                <td class="text-center">
-                                    <div class="dropdown no-arrow">
-                                        <a class="dropdown-toggle btn btn-sm btn-secondary" href="#" role="button" id="dropdownMenuLink<?= $rowUser['id'] ?>" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                            Actions
-                                        </a>
-                                        <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in" aria-labelledby="dropdownMenuLink<?= $rowUser['id'] ?>">
-                                            <a class="dropdown-item" href="#" onclick="event.preventDefault(); viewProfile(<?= $rowUser['id'] ?>)">
-                                                <i class="fas fa-user fa-sm fa-fw mr-2 text-gray-400"></i>View Profile
-                                            </a>
-                                            <a class="dropdown-item" href="#" onclick="event.preventDefault(); removeUser(<?= $rowUser['id'] ?>)">
-                                                <i class="fas fa-trash fa-sm fa-fw mr-2 text-gray-400"></i>Remove
-                                            </a>
-                                        </div>
-                                    </div>
+                                <td><?= $attendance['lastname'] . ', ' . $attendance['firstname'] ?></td>
+                                <td><?= date('M d, Y g:i A', strtotime($attendance['timestamp'])) ?></td>
+                                <td>
+                                    <?php if ($attendance['day'] && $attendance['room']): ?>
+                                        <?= $attendance['day'] ?> (<?= $attendance['room'] ?>)
+                                    <?php else: ?>
+                                        <span class="text-muted">General attendance</span>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endwhile; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="3" class="text-center">No users enrolled in this subject.</td>
+                                <td colspan="3" class="text-center">No attendance records found.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -166,7 +356,6 @@ $result = $conn->query($sql);
             </div>
         </div>
     </div>
-    
 </div>
 <!-- /.container-fluid -->
 
@@ -205,6 +394,11 @@ $result = $conn->query($sql);
                     <p><strong>Subject:</strong> <?= $subject['name'] ?> (<?= $subject['code'] ?>)</p>
                     <p><strong>Generated:</strong> <span id="qr-timestamp"></span></p>
                     <p><strong>Expires:</strong> <span id="qr-expiry"></span></p>
+                    <!-- Add countdown timer display -->
+                    <div class="progress" style="height: 5px;">
+                        <div id="qr-refresh-progress" class="progress-bar bg-info" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <p class="mt-1 mb-0 small text-muted">Refreshes in <span id="qr-countdown">30</span> seconds</p>
                 </div>
                 <button type="button" id="refreshQrBtn" class="btn btn-primary mt-2">
                     <i class="fas fa-sync-alt"></i> Refresh QR Code
@@ -319,7 +513,7 @@ $result = $conn->query($sql);
 </div>
 
 <!-- Edit Schedule Modal -->
-<div class="modal fade" id="editScheduleModal" tabindex="-1" role="dialog" aria-labelledby="editScheduleModalLabel" aria.hidden="true">
+<div class="modal fade" id="editScheduleModal" tabindex="-1" role="dialog" aria.hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <form id="editScheduleForm" method="post" action="update_schedule.php">
@@ -380,7 +574,86 @@ $result = $conn->query($sql);
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <script>
+// Add function to change join code from the subject view
+function changeJoinCode(subjectId, subjectCode) {
+    const newJoinCode = generateRandomJoinCode(6);
+    
+    Swal.fire({
+        title: 'Change Join Code?',
+        html: '<p>Are you sure you want to change the join code for subject <strong>' + subjectCode + '</strong>?</p>' +
+              '<p>The new join code will be: <span class="h3">' + newJoinCode + '</span></p>' +
+              '<p class="text-warning">Note: Students using the old code will no longer be able to join.</p>',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, change it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Send AJAX request to update the join code
+            $.ajax({
+                url: 'change_joincode.php',
+                type: 'POST',
+                data: {
+                    subject_id: subjectId,
+                    new_joincode: newJoinCode
+                },
+                success: function(response) {
+                    const data = JSON.parse(response);
+                    if (data.status === 'success') {
+                        Swal.fire({
+                            title: 'Join Code Changed!',
+                            html: '<p>The join code has been updated successfully:</p>' +
+                                  '<p><strong>Subject:</strong> ' + data.subject_code + '</p>' +
+                                  '<p><strong>New Join Code:</strong> <span class="h3">' + newJoinCode + '</span></p>' +
+                                  '<p>Please share this new code with students.</p>',
+                            icon: 'success',
+                            confirmButtonColor: '#3085d6',
+                            confirmButtonText: 'OK'
+                        }).then(() => {
+                            // Reload page to see the updated join code
+                            location.reload();
+                        });
+                    } else {
+                        Swal.fire('Error', 'Failed to update join code.', 'error');
+                    }
+                },
+                error: function() {
+                    Swal.fire('Error', 'Failed to update join code.', 'error');
+                }
+            });
+        }
+    });
+}
+
+// Function to generate random join code
+function generateRandomJoinCode(length) {
+    const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Removed confusing characters like I, O, 0, 1
+    let code = "";
+    for (let i = 0; i < length; i++) {
+        const randomIndex = Math.floor(Math.random() * charset.length);
+        code += charset[randomIndex];
+    }
+    return code;
+}
+
 $(document).ready(function() {
+    // Initialize DataTable for schedules
+    $('#schedulesTable').DataTable({
+        pageLength: 5,
+        lengthMenu: [5, 10, 25, 50],
+        searching: false,
+        ordering: true,
+        info: false,
+        responsive: true,
+        language: {
+            paginate: {
+                previous: '<i class="fas fa-chevron-left"></i>',
+                next: '<i class="fas fa-chevron-right"></i>'
+            }
+        }
+    });
+    
     // Handle schedule form submission via AJAX
     $('#addScheduleForm').on('submit', function(e) {
         e.preventDefault();
@@ -496,13 +769,25 @@ $(document).ready(function() {
     // Initialize QR code when modal is opened
     $('#qrCodeModal').on('show.bs.modal', function() {
         generateQRCode();
+        startQrAutoRefresh(); // Start automatic refresh when modal is shown
+    });
+    
+    // Stop auto-refresh when modal is closed
+    $('#qrCodeModal').on('hidden.bs.modal', function() {
+        stopQrAutoRefresh(); // Stop automatic refresh when modal is hidden
     });
     
     // Refresh QR code when button is clicked
     $('#refreshQrBtn').on('click', function() {
         generateQRCode();
+        resetQrAutoRefresh(); // Reset the timer after manual refresh
     });
 });
+
+// Global variables for QR auto-refresh
+let qrAutoRefreshTimer;
+let qrCountdownInterval;
+let qrTimeRemaining = 30;
 
 // Function to generate QR code with subject info and timestamp
 function generateQRCode() {
@@ -545,6 +830,68 @@ function generateQRCode() {
     // Display QR code
     const qrImage = qr.createImgTag(5);
     $('#qrcode').html(qrImage);
+    
+    // Reset countdown timer
+    qrTimeRemaining = 30;
+    $('#qr-countdown').text(qrTimeRemaining);
+    $('#qr-refresh-progress').css('width', '100%');
+}
+
+// Start automatic QR code refresh
+function startQrAutoRefresh() {
+    // Clear any existing timers
+    stopQrAutoRefresh();
+    
+    // Set up the main refresh timer (30 seconds)
+    qrAutoRefreshTimer = setTimeout(function() {
+        generateQRCode(); // Generate new QR code
+        startQrAutoRefresh(); // Restart the timer
+    }, 30000);
+    
+    // Set up countdown display
+    qrTimeRemaining = 30;
+    qrCountdownInterval = setInterval(function() {
+        qrTimeRemaining--;
+        
+        // Update countdown text
+        $('#qr-countdown').text(qrTimeRemaining);
+        
+        // Update progress bar
+        const progressPercent = (qrTimeRemaining / 30) * 100;
+        $('#qr-refresh-progress').css('width', progressPercent + '%');
+        
+        // Change progress bar color as time decreases
+        if (qrTimeRemaining <= 5) {
+            $('#qr-refresh-progress').removeClass('bg-info bg-warning').addClass('bg-danger');
+        } else if (qrTimeRemaining <= 10) {
+            $('#qr-refresh-progress').removeClass('bg-info bg-danger').addClass('bg-warning');
+        } else {
+            $('#qr-refresh-progress').removeClass('bg-warning bg-danger').addClass('bg-info');
+        }
+        
+        if (qrTimeRemaining <= 0) {
+            clearInterval(qrCountdownInterval);
+        }
+    }, 1000);
+}
+
+// Stop automatic QR refresh
+function stopQrAutoRefresh() {
+    if (qrAutoRefreshTimer) {
+        clearTimeout(qrAutoRefreshTimer);
+        qrAutoRefreshTimer = null;
+    }
+    
+    if (qrCountdownInterval) {
+        clearInterval(qrCountdownInterval);
+        qrCountdownInterval = null;
+    }
+}
+
+// Reset the auto-refresh timer (used after manual refresh)
+function resetQrAutoRefresh() {
+    stopQrAutoRefresh();
+    startQrAutoRefresh();
 }
 
 // Function to edit schedule
@@ -819,8 +1166,8 @@ function onScanSuccess(decodedText, decodedResult) {
             const attendanceData = {
                 subject_id: data.subject_id,
                 schedule_id: data.schedule_id || null,
-                student_id: <?= $_SESSION['user_id'] ?>,
-                timestamp: new Date().toISOString()
+                user_id: <?= $_SESSION['user_id'] ?>,
+                time_in: new Date().toISOString()
             };
             
             $.ajax({
@@ -935,6 +1282,7 @@ $('#change-camera-btn').on('click', function() {
 // Schedule change affects QR code
 $('#schedule-select').on('change', function() {
     generateQRCode();
+    resetQrAutoRefresh(); // Reset timer when schedule changes
 });
 </script>
 

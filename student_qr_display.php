@@ -127,6 +127,12 @@ include 'includes/header.php';
                         <div class="text-center mt-3">
                             <p class="text-muted mb-1">Last updated: <span id="last-update">Just now</span></p>
                             <p class="text-muted">Keep this screen visible for the instructor to scan</p>
+                            
+                            <!-- Add countdown timer display -->
+                            <div class="progress mt-3" style="height: 5px;">
+                                <div id="qr-refresh-progress" class="progress-bar bg-info" role="progressbar" style="width: 100%"></div>
+                            </div>
+                            <p class="mt-1 mb-0 small text-muted">Refreshes in <span id="qr-countdown">30</span> seconds</p>
                         </div>
                     </div>
 
@@ -151,6 +157,8 @@ include 'includes/header.php';
 
 <script>
 let autoRefreshInterval;
+let qrCountdownInterval;
+let qrTimeRemaining = 30;
 
 // Initialize on page load
 $(document).ready(function() {
@@ -199,17 +207,59 @@ function generateQRCode() {
     
     // Update timestamp
     $('#last-update').text(now.toLocaleTimeString());
+    
+    // Reset countdown timer
+    qrTimeRemaining = 30;
+    $('#qr-countdown').text(qrTimeRemaining);
+    $('#qr-refresh-progress').css('width', '100%');
 }
 
-// Start auto-refresh timer
+// Start auto-refresh timer with visual countdown
 function startAutoRefresh() {
     // Clear any existing interval
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
     }
     
+    if (qrCountdownInterval) {
+        clearInterval(qrCountdownInterval);
+    }
+    
+    // Set up countdown display
+    qrTimeRemaining = 30;
+    qrCountdownInterval = setInterval(function() {
+        qrTimeRemaining--;
+        
+        // Update countdown text
+        $('#qr-countdown').text(qrTimeRemaining);
+        
+        // Update progress bar
+        const progressPercent = (qrTimeRemaining / 30) * 100;
+        $('#qr-refresh-progress').css('width', progressPercent + '%');
+        
+        // Change progress bar color as time decreases
+        if (qrTimeRemaining <= 5) {
+            $('#qr-refresh-progress').removeClass('bg-info bg-warning').addClass('bg-danger');
+        } else if (qrTimeRemaining <= 10) {
+            $('#qr-refresh-progress').removeClass('bg-info bg-danger').addClass('bg-warning');
+        } else {
+            $('#qr-refresh-progress').removeClass('bg-warning bg-danger').addClass('bg-info');
+        }
+        
+        if (qrTimeRemaining <= 0) {
+            clearInterval(qrCountdownInterval);
+        }
+    }, 1000);
+    
     // Refresh QR code every 30 seconds
-    autoRefreshInterval = setInterval(generateQRCode, 30000);
+    autoRefreshInterval = setInterval(function() {
+        generateQRCode();
+        // Restart countdown
+        if (qrCountdownInterval) {
+            clearInterval(qrCountdownInterval);
+        }
+        startAutoRefresh();
+    }, 30000);
 }
 
 // Handle page visibility changes
@@ -217,6 +267,7 @@ document.addEventListener('visibilitychange', function() {
     if (document.hidden) {
         // Page is hidden, clear interval
         clearInterval(autoRefreshInterval);
+        clearInterval(qrCountdownInterval);
         $('#qr-refresh-badge').removeClass('badge-success').addClass('badge-warning').text('Paused');
     } else {
         // Page is visible again, generate new QR and restart interval

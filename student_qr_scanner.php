@@ -609,6 +609,15 @@ function updateScannerDimensions() {
 </script>
 <?php endif; ?>
 
+<div id="scan-success-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 999;">
+    <div class="text-center text-white">
+        <div class="spinner-grow text-light mb-2" style="width: 3rem; height: 3rem;" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <h5 class="mt-2 font-weight-bold">Scan Successful!</h5>
+    </div>
+</div>
+
 </body>
 </html>
 <?php

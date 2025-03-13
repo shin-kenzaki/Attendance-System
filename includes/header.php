@@ -157,7 +157,7 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="attendance.php">
+                    <a class="nav-link" href="attendances.php">
                         <i class="fas fa-fw fa-calendar-check"></i>
                         <span>Attendance</span>
                     </a>
@@ -166,6 +166,12 @@
                     <a class="nav-link" href="reports.php">
                         <i class="fas fa-fw fa-chart-bar"></i>
                         <span>Reports</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="recent_activities_logins.php">
+                        <i class="fas fa-fw fa-history"></i>
+                        <span>Recent Activities & Logins</span>
                     </a>
                 </li>
                 
@@ -270,25 +276,25 @@
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="attendances.php">
+                    <a class="nav-link" href="faculty_attendances.php">
                         <i class="fas fa-fw fa-clipboard-list"></i>
                         <span>Attendances</span></a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="students.php">
+                    <a class="nav-link" href="faculty_students.php">
                         <i class="fas fa-fw fa-user-graduate"></i>
                         <span>Students</span></a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="schedule.php">
+                    <a class="nav-link" href="faculty_schedules.php">
                         <i class="fas fa-fw fa-calendar"></i>
-                        <span>Schedule</span></a>
+                        <span>My Schedule</span></a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="reports.php">
+                    <a class="nav-link" href="faculty_reports.php">
                         <i class="fas fa-fw fa-chart-bar"></i>
                         <span>Reports</span></a>
                 </li>
@@ -328,13 +334,13 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="attendance.php">
+                    <a class="nav-link" href="student_attendances.php">
                         <i class="fas fa-fw fa-calendar-check"></i>
                         <span>My Attendance</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="schedule.php">
+                    <a class="nav-link" href="student_schedules.php">
                         <i class="fas fa-fw fa-calendar"></i>
                         <span>Class Schedule</span>
                     </a>

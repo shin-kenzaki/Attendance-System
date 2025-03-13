@@ -11,16 +11,20 @@ if (!isset($_SESSION['user_id']) || $_SESSION['usertype'] !== 'student') {
 
 $student_id = $_SESSION['user_id']; // Changed from id to user_id to match header.php
 
-// Get student's subjects
+// Get student's subjects with attendance information
 $query = "SELECT s.*, us.id as enrollment_id, 
-          sch.day, sch.start_time, sch.end_time, sch.room
+          sch.day, sch.start_time, sch.end_time, sch.room,
+          (SELECT MIN(DATE(time_in)) FROM attendances WHERE subject_id = s.id) as first_attendance,
+          (SELECT MAX(DATE(time_in)) FROM attendances WHERE subject_id = s.id) as last_attendance,
+          (SELECT COUNT(*) FROM attendances WHERE subject_id = s.id AND user_id = ?) as user_attendance_count,
+          (SELECT COUNT(DISTINCT DATE(time_in)) FROM attendances WHERE subject_id = s.id) as total_class_days
           FROM subjects s
           INNER JOIN usersubjects us ON s.id = us.subject_id
           LEFT JOIN schedules sch ON s.id = sch.subject_id
           WHERE us.user_id = ? AND s.status = 1";
 
 $stmt = $conn->prepare($query);
-$stmt->bind_param("i", $student_id);
+$stmt->bind_param("ii", $student_id, $student_id);
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -88,6 +92,20 @@ include 'includes/header.php';
 <!-- Add this before closing </head> tag -->
 <script src="https://unpkg.com/html5-qrcode"></script>
 
+<style>
+.progress-slim {
+    height: 5px;
+}
+.session-dates {
+    border-top: 1px solid rgba(0,0,0,0.1);
+    padding-top: 10px;
+    margin-top: 10px;
+}
+.attendance-badge {
+    font-size: 85%;
+}
+</style>
+
 <!-- Begin Page Content -->
 <div class="container-fluid">
 
@@ -126,17 +144,85 @@ include 'includes/header.php';
     <!-- Content Row -->
     <div class="row">
         <?php if ($result->num_rows > 0): 
-            while ($subject = $result->fetch_assoc()): ?>
+            while ($subject = $result->fetch_assoc()): 
+                // Calculate attendance rate
+                $attendanceRate = $subject['total_class_days'] > 0 ? 
+                    ($subject['user_attendance_count'] / $subject['total_class_days']) * 100 : 0;
+                $attendanceColor = "success";
+                if ($attendanceRate < 75) {
+                    $attendanceColor = "danger";
+                } else if ($attendanceRate < 90) {
+                    $attendanceColor = "warning";
+                }
+                
+                // Determine session status
+                $sessionStatus = "Not started";
+                $sessionStatusColor = "secondary";
+                
+                if ($subject['first_attendance']) {
+                    $today = new DateTime();
+                    $startDate = new DateTime($subject['first_attendance']);
+                    $endDate = $subject['last_attendance'] ? new DateTime($subject['last_attendance']) : $today;
+                    
+                    // Calculate session progress
+                    $totalDays = $startDate->diff($endDate)->days + 1;
+                    $elapsedDays = $startDate->diff($today)->days + 1;
+                    $sessionProgress = min(100, max(0, ($elapsedDays / $totalDays) * 100));
+                    
+                    if ($today < $startDate) {
+                        $sessionStatus = "Starting soon";
+                        $sessionStatusColor = "info";
+                    } elseif ($today > $endDate) {
+                        $sessionStatus = "Completed";
+                        $sessionStatusColor = "secondary";
+                    } else {
+                        $sessionStatus = "Ongoing";
+                        $sessionStatusColor = "success";
+                    }
+                }
+                
+                // Determine next class
+                $nextClass = null;
+                if ($subject['day']) {
+                    $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    $today = date('w'); // 0 (Sunday) through 6 (Saturday)
+                    $scheduleDay = array_search($subject['day'], $days);
+                    
+                    if ($scheduleDay !== false) {
+                        $daysUntil = ($scheduleDay - $today + 7) % 7;
+                        $daysUntil = $daysUntil === 0 && date('H:i:s') > $subject['start_time'] ? 7 : $daysUntil;
+                        $nextClass = $daysUntil === 0 ? 'Today' : ($daysUntil === 1 ? 'Tomorrow' : $days[$scheduleDay]);
+                    }
+                }
+            ?>
             <div class="col-xl-4 col-md-6 mb-4">
                 <div class="card shadow h-100">
                     <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                         <h6 class="m-0 font-weight-bold text-info">
                             <?php echo htmlspecialchars($subject['code']); ?>
+                            <span class="badge badge-<?php echo $sessionStatusColor; ?> ml-2"><?php echo $sessionStatus; ?></span>
                         </h6>
-                        
                     </div>
                     <div class="card-body">
                         <h5 class="card-title font-weight-bold"><?php echo htmlspecialchars($subject['name']); ?></h5>
+                        
+                        <!-- Attendance Statistics -->
+                        <div class="mb-3 mt-2">
+                            <h6 class="font-weight-bold text-sm">Your Attendance:</h6>
+                            <div class="d-flex align-items-center">
+                                <div class="progress progress-slim flex-grow-1 mr-2">
+                                    <div class="progress-bar bg-<?php echo $attendanceColor; ?>" role="progressbar" 
+                                         style="width: <?php echo round($attendanceRate); ?>%" 
+                                         aria-valuenow="<?php echo round($attendanceRate); ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <span class="attendance-badge badge badge-<?php echo $attendanceColor; ?>">
+                                    <?php echo round($attendanceRate); ?>%
+                                </span>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                <?php echo $subject['user_attendance_count'] . ' of ' . $subject['total_class_days'] . ' class days'; ?>
+                            </div>
+                        </div>
                         
                         <?php if ($subject['day']): ?>
                         <div class="mt-3">
@@ -145,6 +231,9 @@ include 'includes/header.php';
                                 <li class="list-group-item py-2 px-0 border-top-0 border-bottom">
                                     <i class="fas fa-calendar-day mr-2 text-gray-500"></i>
                                     <?php echo htmlspecialchars($subject['day']); ?>
+                                    <?php if ($nextClass): ?>
+                                    <span class="badge badge-info ml-2">Next: <?php echo $nextClass; ?></span>
+                                    <?php endif; ?>
                                     <br>
                                     <i class="fas fa-clock ml-2 mr-1 text-gray-500"></i>
                                     <?php echo date("h:i A", strtotime($subject['start_time'])) . ' - ' . 
@@ -158,6 +247,30 @@ include 'includes/header.php';
                         <?php else: ?>
                         <div class="alert alert-warning mt-3">
                             <i class="fas fa-exclamation-triangle mr-2"></i> No schedule set
+                        </div>
+                        <?php endif; ?>
+                        
+                        <?php if ($subject['first_attendance']): ?>
+                        <div class="session-dates">
+                            <h6 class="font-weight-bold">Session Period:</h6>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="small text-muted">
+                                    <?php echo date('M d, Y', strtotime($subject['first_attendance'])); ?> - 
+                                    <?php echo $subject['last_attendance'] ? date('M d, Y', strtotime($subject['last_attendance'])) : 'Ongoing'; ?>
+                                </div>
+                                <?php if ($sessionStatus === "Ongoing"): ?>
+                                <div class="text-xs text-muted">
+                                    <?php echo round($sessionProgress); ?>% complete
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ($sessionStatus === "Ongoing"): ?>
+                            <div class="progress progress-slim">
+                                <div class="progress-bar bg-info" role="progressbar" 
+                                     style="width: <?php echo $sessionProgress; ?>%" 
+                                     aria-valuenow="<?php echo $sessionProgress; ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <?php endif; ?>
                         </div>
                         <?php endif; ?>
                     </div>

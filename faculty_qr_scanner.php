@@ -133,7 +133,29 @@ include 'includes/header.php';
                                     <p>Switching camera...</p>
                                 </div>
                             </div>
-                            <div id="reader" style="width: 100%; min-height: 300px;"></div> <!-- Removed mirror transform -->
+                            
+                            <!-- Add scanner initialization overlay -->
+                            <div id="scanner-init-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; border-radius: 10px; z-index: 10;">
+                                <div class="text-center text-white">
+                                    <div class="spinner-grow text-light mb-2" style="width: 3rem; height: 3rem;" role="status">
+                                        <span class="sr-only">Loading...</span>
+                                    </div>
+                                    <p class="mt-2 font-weight-bold">Initializing Camera...</p>
+                                    <p class="small">Please grant camera access when prompted</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Add scan success animation overlay -->
+                            <div id="scan-success-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; border-radius: 10px; z-index: 11;">
+                                <div class="text-center">
+                                    <div class="spinner-grow text-success mb-2" style="width: 3rem; height: 3rem;" role="status">
+                                        <span class="sr-only">Loading...</span>
+                                    </div>
+                                    <h5 class="mt-3 text-success font-weight-bold">Scan Successful!</h5>
+                                </div>
+                            </div>
+                            
+                            <div id="reader" style="width: 100%; min-height: 300px;"></div>
                         </div>
                         <div id="scanner-status" class="text-center mt-3">
                             <p class="text-muted">Initializing camera...</p>
@@ -360,9 +382,10 @@ function updateAttendanceTable(data) {
     });
 }
 
-// Initialize the scanner
+// Initialize the scanner with improved loading animations
 function initializeScanner() {
     $('#scanner-status').html('<p class="text-muted">Requesting camera permission...</p>');
+    $('#scanner-init-overlay').css('display', 'flex');
     
     // Create scanner instance
     html5QrCode = new Html5Qrcode("reader");
@@ -383,21 +406,24 @@ function initializeScanner() {
             }
             startScanner();
         } else {
+            $('#scanner-init-overlay').hide();
             $('#scanner-status').html('<p class="text-danger">No cameras found. Please connect a camera to continue.</p>');
             $('#scannerStatusBtn').removeClass('btn-success').addClass('btn-danger').html('<i class="fas fa-exclamation-circle mr-1"></i> No Camera');
         }
     }).catch(err => {
+        $('#scanner-init-overlay').hide();
         $('#scanner-status').html(`<p class="text-danger">Error accessing camera: ${err}</p>`);
         $('#scannerStatusBtn').removeClass('btn-success').addClass('btn-danger').html('<i class="fas fa-exclamation-circle mr-1"></i> Camera Error');
         console.error("Error getting cameras", err);
     });
 }
 
-// Start the scanner
+// Start the scanner with loading animation
 function startScanner() {
     if (!html5QrCode) return;
     
     $('#scanner-status').html('<p class="text-primary">Starting camera...</p>');
+    $('#scanner-init-overlay').css('display', 'flex');
     scanning = true;
     
     // Configure scanner with responsive settings
@@ -419,6 +445,9 @@ function startScanner() {
         onScanProgress
     )
     .then(() => {
+        // Hide loading overlay with fade effect
+        $('#scanner-init-overlay').fadeOut(400);
+        
         $('#scanner-status').html('<p class="text-success">Camera active. Scan a student QR code.</p>');
         $('#toggle-camera-btn').html('<i class="fas fa-video-slash"></i> Stop Camera');
         $('#scannerStatusBtn').removeClass('btn-danger').addClass('btn-success').html('<i class="fas fa-check-circle mr-1"></i> Scanner Active');
@@ -428,6 +457,7 @@ function startScanner() {
     })
     .catch(err => {
         scanning = false;
+        $('#scanner-init-overlay').hide();
         $('#scanner-status').html(`<p class="text-danger">Error starting camera: ${err}</p>`);
         $('#toggle-camera-btn').html('<i class="fas fa-video"></i> Start Camera');
         $('#scannerStatusBtn').removeClass('btn-success').addClass('btn-danger').html('<i class="fas fa-exclamation-circle mr-1"></i> Scanner Error');
@@ -464,17 +494,20 @@ function stopScanner() {
     }
 }
 
-// Handle successful scan - add better type checking and validation
+// Handle successful scan with animation
 function onScanSuccess(decodedText, decodedResult) {
     // Play a success sound
     const successAudio = new Audio('assets/sounds/beep-success.mp3');
     successAudio.play().catch(err => console.log('Error playing sound:', err));
     
+    // Show success animation
+    $('#scan-success-overlay').css('display', 'flex').fadeIn(200);
+    
     try {
-        // Try to parse the QR data (expecting JSON with student information)
+        // Try to parse the QR data
         const data = JSON.parse(decodedText);
         
-        // Validate the scanned data has the required fields
+        // Validate the scanned data
         if (!data.user_id || !data.name) {
             throw new Error('Invalid QR code format');
         }
@@ -487,6 +520,11 @@ function onScanSuccess(decodedText, decodedResult) {
         // Check if student has already been scanned
         const existingRecord = attendanceLog.find(record => record.user_id === data.user_id);
         if (existingRecord) {
+            // Hide success animation
+            setTimeout(() => {
+                $('#scan-success-overlay').fadeOut(200);
+            }, 1000);
+            
             // Already scanned, show a warning
             Swal.fire({
                 title: 'Already Scanned!',
@@ -499,10 +537,18 @@ function onScanSuccess(decodedText, decodedResult) {
             return;
         }
         
-        // Process attendance
-        recordAttendance(data);
+        // Hide success animation after 1.5 seconds and process attendance
+        setTimeout(() => {
+            $('#scan-success-overlay').fadeOut(200, function() {
+                // Process attendance after animation completes
+                recordAttendance(data);
+            });
+        }, 1500);
         
     } catch (error) {
+        // Hide success animation
+        $('#scan-success-overlay').fadeOut(200);
+        
         console.error('Error processing QR code:', error);
         
         // Show error notification
@@ -830,6 +876,65 @@ function updateScannerDimensions() {
     }
 }
 </script>
+
+<style>
+/* Add success checkmark animation CSS */
+.checkmark-circle {
+    width: 100px;
+    height: 100px;
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+    margin-left: auto;
+    margin-right: auto;
+}
+.checkmark-circle-bg {
+    border-radius: 50%;
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    background-color: #4CAF50;
+    animation: fill-bg .4s ease-in-out;
+}
+.checkmark {
+    border-radius: 0;
+    stroke-width: 6;
+    stroke: #fff;
+    stroke-miterlimit: 10;
+    box-shadow: inset 0px 0px 0px #4CAF50;
+    animation: stroke .6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+    position: relative;
+    width: 100px;
+    height: 100px;
+}
+.checkmark.draw:after {
+    content: '';
+    transform: scaleX(-1) rotate(135deg);
+    transform-origin: left top;
+    border-right: 18px solid #fff;
+    border-top: 18px solid #fff;
+    position: absolute;
+    left: 25px;
+    top: 45px;
+    width: 40px;
+    height: 20px;
+    animation: check-draw .5s ease-in-out .7s forwards;
+    opacity: 0;
+}
+@keyframes stroke {
+    100% {
+        stroke-dashoffset: 0;
+    }
+}
+@keyframes fill-bg {
+    0% { transform: scale(0); }
+    100% { transform: scale(1); }
+}
+@keyframes check-draw {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+</style>
 
 </body>
 </html>

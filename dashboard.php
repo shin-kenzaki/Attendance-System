@@ -388,10 +388,11 @@ if ($recentActivitiesResult && $recentActivitiesResult->num_rows > 0) {
                         <!-- Recent Activities -->
                         <div class="col-lg-6 mb-4">
                             <div class="card shadow mb-4">
-                                <div class="card-header py-3">
+                                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                                     <h6 class="m-0 font-weight-bold text-primary">Recent Activities</h6>
+                                    <a href="recent_activities_logins.php" class="btn btn-sm btn-primary">View All</a>
                                 </div>
-                                <div class="card-body">
+                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                                     <?php if (empty($recentActivities)): ?>
                                         <p class="text-center">No recent activities found</p>
                                     <?php else: ?>
@@ -426,10 +427,11 @@ if ($recentActivitiesResult && $recentActivitiesResult->num_rows > 0) {
                         <!-- Recent Logins -->
                         <div class="col-lg-6 mb-4">
                             <div class="card shadow mb-4">
-                                <div class="card-header py-3">
+                                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                                     <h6 class="m-0 font-weight-bold text-primary">Recent Logins</h6>
+                                    <a href="recent_activities_logins.php" class="btn btn-sm btn-primary">View All</a>
                                 </div>
-                                <div class="card-body">
+                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                                     <div class="table-responsive">
                                         <table class="table table-bordered" width="100%" cellspacing="0">
                                             <thead>
